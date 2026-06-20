@@ -2,6 +2,14 @@ import type { BBox } from '../geo/types';
 
 export const DEFAULT_OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
 
+/**
+ * Overpass instances (overpass-api.de) reject requests without a User-Agent
+ * with 406. Browsers send their own UA and forbid scripts from setting this
+ * header, so it is silently dropped there; in Node/headless contexts it is sent
+ * and also identifies our client politely.
+ */
+const USER_AGENT = 'tastmap/0.1 (tactile map generator)';
+
 export interface OverpassWay {
   type: 'way';
   id: number;
@@ -43,7 +51,10 @@ export async function fetchOverpass(
   const query = buildQuery(bbox, keys);
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': USER_AGENT,
+    },
     body: 'data=' + encodeURIComponent(query),
     signal: opts.signal,
   });
