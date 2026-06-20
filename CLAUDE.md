@@ -44,8 +44,9 @@ tested on a real Schwellpapierkopierer — the **calibration sheet**
 Done: clipping + margins (`core/geo/clip`); calibration sheet; ink text in the
 PDF backend (pdf-lib StandardFonts); multi-page PDFs (`renderPdfPages`); a
 tactile line/area vocabulary (`core/scene/lines` — wavy, beaded, ladder,
-parallel-pair, scatter); a condensed **3-page test-sheet gallery**
-(`core/testsheets`, "Test sheets" button, `scripts/testsheets.ts`) — packed,
-low-text (swell paper is expensive) — for print-run evaluation of every
+parallel-pair, scatter); a condensed **2-page test-sheet gallery**
+(`core/testsheets` — p1 lines+patterns, p2 map; "Test sheets" button,
+`scripts/testsheets.ts`) — packed, low-text (swell paper is expensive) — for
+print-run evaluation of every
 candidate width/texture/symbol; feed its results back into `defaultStyle.ts`
 and real symbology (`lines`/`textures` are the building blocks to select from).
