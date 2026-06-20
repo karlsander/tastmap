@@ -90,9 +90,9 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 
 - [x] Clip geometry to the printable area; apply margins.
 - [x] Calibration sheet to tune line widths/textures to a specific fuser.
-- [x] Test-sheet gallery (8 pages: widths, separation, textures, water/park
-      ideas, street-vs-border styles, intersection/crossing/tram/sidewalk
-      detail) — "Test sheets" button, or `npx vite-node scripts/testsheets.ts`.
+- [x] Test-sheet gallery (3 dense pages: widths, separation, braille, textures,
+      water/park ideas, street-vs-border styles, intersection/crossing/tram/
+      sidewalk detail) — "Test sheets" button, or `npx vite-node scripts/testsheets.ts`.
 - [ ] Generalization: simplify, enforce minimum feature size & separation.
 - [ ] Area features with tactile **textures** (hatch / dot grids) — fill
       helpers exist in `core/scene/textures`; wire into the area pipeline.

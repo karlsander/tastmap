@@ -175,7 +175,7 @@ testSheetsBtn.addEventListener('click', () => {
   void withBusy('Rendering test-sheet gallery…', async () => {
     const pdf = await renderTestSheets();
     showPdf(pdf, 'tastmap-test-sheets.pdf');
-    setStatus('Done — 8-page test gallery. Print all, fuse, and feel what works.');
+    setStatus('Done — 3-page test gallery. Print all, fuse, and feel what works.');
   });
 });
 

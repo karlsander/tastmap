@@ -88,11 +88,32 @@ function drawText(
 ): void {
   // origin is the left end of the text baseline, which is exactly pdf-lib's
   // drawText anchor (lower-left of the first glyph, on the baseline).
-  page.drawText(prim.text, {
+  const opts = {
     x: X(prim.origin.x),
     y: Y(prim.origin.y),
     size: toPt(prim.sizeMm),
     font,
     color: BLACK,
-  });
+  };
+  try {
+    page.drawText(prim.text, opts);
+  } catch {
+    // Helvetica (WinAnsi) can't encode every character a real label or OSM name
+    // might contain; degrade those to '?' rather than failing the whole render.
+    page.drawText(toWinAnsiSafe(prim.text, font), opts);
+  }
+}
+
+/** Replace characters the font cannot encode with '?'. */
+function toWinAnsiSafe(text: string, font: PDFFont): string {
+  let out = '';
+  for (const ch of text) {
+    try {
+      font.encodeText(ch);
+      out += ch;
+    } catch {
+      out += '?';
+    }
+  }
+  return out;
 }
