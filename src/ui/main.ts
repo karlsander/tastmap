@@ -2,6 +2,7 @@ import './styles.css';
 import {
   DEFAULT_MARGIN_MM,
   generateMap,
+  renderCalibration,
   renderedBBox,
   streetOverview,
   styles,
@@ -31,6 +32,7 @@ const statusEl = el<HTMLParagraphElement>('status');
 const downloadEl = el<HTMLAnchorElement>('download');
 const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
+const calibrateBtn = el<HTMLButtonElement>('calibrate');
 
 // Populate the style dropdown from the registry.
 for (const spec of Object.values(styles)) {
@@ -115,7 +117,33 @@ form.querySelectorAll('input[name="orientation"]').forEach((r) =>
 
 let lastUrl: string | null = null;
 
-form.addEventListener('submit', async (e) => {
+/** Show a freshly generated PDF in the preview and wire up the download link. */
+function showPdf(pdf: Uint8Array, downloadName: string): void {
+  const blob = new Blob([pdf as BlobPart], { type: 'application/pdf' });
+  if (lastUrl) URL.revokeObjectURL(lastUrl);
+  lastUrl = URL.createObjectURL(blob);
+  previewEl.src = lastUrl;
+  downloadEl.href = lastUrl;
+  downloadEl.download = downloadName;
+  downloadEl.hidden = false;
+}
+
+/** Run an async PDF producer while disabling the buttons and reporting status. */
+async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<void> {
+  generateBtn.disabled = true;
+  calibrateBtn.disabled = true;
+  setStatus(busyMessage);
+  try {
+    await run();
+  } catch (err) {
+    setStatus('Error: ' + (err instanceof Error ? err.message : String(err)));
+  } finally {
+    generateBtn.disabled = false;
+    calibrateBtn.disabled = false;
+  }
+}
+
+form.addEventListener('submit', (e) => {
   e.preventDefault();
   const params = readParams();
   if (Number.isNaN(params.center.lat) || Number.isNaN(params.center.lng)) {
@@ -127,22 +155,19 @@ form.addEventListener('submit', async (e) => {
     return;
   }
 
-  generateBtn.disabled = true;
-  setStatus('Fetching OpenStreetMap data and rendering…');
-  try {
+  void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
     const { pdf, featureCount, strokeCount } = await generateMap(params);
-    const blob = new Blob([pdf as BlobPart], { type: 'application/pdf' });
-    if (lastUrl) URL.revokeObjectURL(lastUrl);
-    lastUrl = URL.createObjectURL(blob);
-    previewEl.src = lastUrl;
-    downloadEl.href = lastUrl;
-    downloadEl.hidden = false;
+    showPdf(pdf, 'tastmap.pdf');
     setStatus(`Done — ${featureCount} features matched, ${strokeCount} strokes drawn.`);
-  } catch (err) {
-    setStatus('Error: ' + (err instanceof Error ? err.message : String(err)));
-  } finally {
-    generateBtn.disabled = false;
-  }
+  });
+});
+
+calibrateBtn.addEventListener('click', () => {
+  void withBusy('Rendering calibration sheet…', async () => {
+    const pdf = await renderCalibration({ paper: paperSelect.value as PaperSize, marginMm: readMargin() });
+    showPdf(pdf, 'tastmap-calibration.pdf');
+    setStatus('Done — calibration sheet. Print on Schwellpapier, fuse, then feel each row.');
+  });
 });
 
 refreshFootprint();

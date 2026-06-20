@@ -1,3 +1,4 @@
+import { buildCalibrationScene, type CalibrationParams } from './calibration';
 import { printableRect } from './geo/clip';
 import { DEFAULT_MARGIN_MM, getPageDimensions, getPrintableArea, uniformMargins } from './geo/paper';
 import { bboxFromCenter, groundMeters, makeProjector } from './geo/projection';
@@ -80,4 +81,9 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   const pdf = await renderPdf(scene);
 
   return { pdf, featureCount: classified.length, strokeCount: scene.primitives.length };
+}
+
+/** Render the calibration sheet to PDF bytes — no network, purely local. */
+export async function renderCalibration(params: CalibrationParams): Promise<Uint8Array> {
+  return renderPdf(buildCalibrationScene(params));
 }

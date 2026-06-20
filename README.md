@@ -88,13 +88,14 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 
 ## Roadmap
 
-- [ ] Clip geometry to the printable area; apply margins.
+- [x] Clip geometry to the printable area; apply margins.
+- [x] Calibration sheet to tune line widths/textures to a specific fuser.
 - [ ] Generalization: simplify, enforce minimum feature size & separation.
-- [ ] Area features with tactile **textures** (hatch / dot grids).
+- [ ] Area features with tactile **textures** (hatch / dot grids) — fill
+      helpers exist in `core/scene/textures`; wire into the area pipeline.
 - [ ] Braille labels via liblouis + collision-aware placement.
 - [ ] Keyed legend page (braille + ink).
 - [ ] Scale bar, north indicator, title block (braille + ink).
-- [ ] Calibration sheet to tune line widths/textures to a specific fuser.
 - [ ] Sidewalk / crossing detail style.
 
 ## Attribution

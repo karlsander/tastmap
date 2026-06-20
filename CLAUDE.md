@@ -34,7 +34,12 @@ npm run dev | test | typecheck | build
 
 ## Known TODOs (load-bearing)
 
-Clipping/margins, generalization (simplify + min separation), area textures,
-braille labels + keyed legend, scale bar / north / title, fuser calibration sheet.
+Generalization (simplify + min separation), area textures (helpers exist in
+`core/scene/textures` — wire into `buildScene` via `AreaSymbology`), braille
+labels + keyed legend, scale bar / north / title.
 Line widths in `core/style/defaultStyle.ts` are **unvalidated guesses** until
-tested on a real Schwellpapierkopierer.
+tested on a real Schwellpapierkopierer — the **calibration sheet**
+(`core/calibration`, "Calibration sheet" button) exists to drive that tuning.
+
+Done: clipping + margins (`core/geo/clip`); calibration sheet; ink text in the
+PDF backend (pdf-lib StandardFonts).

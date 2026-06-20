@@ -1,5 +1,5 @@
-import { LineCapStyle, PDFDocument, type PDFPage, rgb } from 'pdf-lib';
-import type { DotPrimitive, PathPrimitive, Scene } from '../scene/types';
+import { LineCapStyle, PDFDocument, type PDFFont, type PDFPage, StandardFonts, rgb } from 'pdf-lib';
+import type { DotPrimitive, PathPrimitive, Scene, TextPrimitive } from '../scene/types';
 
 const MM_TO_PT = 72 / 25.4;
 const toPt = (mm: number): number => mm * MM_TO_PT;
@@ -14,6 +14,10 @@ type Transform = (n: number) => number;
  */
 export async function renderPdf(scene: Scene): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
+  // Helvetica is one of pdf-lib's built-in standard fonts, so ink labels need no
+  // embedded font file. Tactile sheets carry print alongside braille so a sighted
+  // helper can read along.
+  const font = await doc.embedFont(StandardFonts.Helvetica);
   const pageHeightPt = toPt(scene.heightMm);
   const page = doc.addPage([toPt(scene.widthMm), pageHeightPt]);
 
@@ -23,7 +27,7 @@ export async function renderPdf(scene: Scene): Promise<Uint8Array> {
   for (const prim of scene.primitives) {
     if (prim.kind === 'path') drawPath(page, prim, X, Y);
     else if (prim.kind === 'dot') drawDot(page, prim, X, Y);
-    // 'text' → TODO: embed a font and draw ink labels
+    else if (prim.kind === 'text') drawText(page, prim, font, X, Y);
   }
 
   return doc.save();
@@ -61,6 +65,24 @@ function drawDot(page: PDFPage, prim: DotPrimitive, X: Transform, Y: Transform):
     x: X(prim.center.x),
     y: Y(prim.center.y),
     size: toPt(prim.radiusMm),
+    color: BLACK,
+  });
+}
+
+function drawText(
+  page: PDFPage,
+  prim: TextPrimitive,
+  font: PDFFont,
+  X: Transform,
+  Y: Transform,
+): void {
+  // origin is the left end of the text baseline, which is exactly pdf-lib's
+  // drawText anchor (lower-left of the first glyph, on the baseline).
+  page.drawText(prim.text, {
+    x: X(prim.origin.x),
+    y: Y(prim.origin.y),
+    size: toPt(prim.sizeMm),
+    font,
     color: BLACK,
   });
 }
