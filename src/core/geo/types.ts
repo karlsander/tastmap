@@ -22,5 +22,13 @@ export interface PointMm {
   y: number;
 }
 
+/** Axis-aligned rectangle in page millimetres (same top-left/y-down space as PointMm). */
+export interface RectMm {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export type PaperSize = 'A4' | 'A3';
 export type Orientation = 'portrait' | 'landscape';

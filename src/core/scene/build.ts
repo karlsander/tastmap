@@ -1,5 +1,6 @@
+import { clipPolylineToRect } from '../geo/clip';
 import type { Projector } from '../geo/projection';
-import type { PointMm } from '../geo/types';
+import type { PointMm, RectMm } from '../geo/types';
 import type { ClassifiedFeature } from '../style/classify';
 import type { PathPrimitive, Primitive, Scene } from './types';
 
@@ -12,27 +13,34 @@ function pathLengthMm(points: PointMm[]): number {
 }
 
 /**
- * Turn classified features into scene primitives in page millimetres.
+ * Turn classified features into scene primitives in page millimetres, clipped to
+ * the printable rectangle `clip` (the page inset by its margins).
+ *
+ * minLengthMm is enforced per clipped part: a stroke that survives clipping only
+ * as a sub-threshold sliver at the page edge is dropped, since it would not be
+ * feel-able anyway.
  *
  * TODO (next slices):
- *   - clip geometry to the printable area
  *   - generalize: simplify, enforce minimum feature separation, displace
  *   - area textures (hatch/dots) instead of solid fills
  *   - braille labels + keyed legend
  */
-export function buildScene(classified: ClassifiedFeature[], proj: Projector): Scene {
+export function buildScene(
+  classified: ClassifiedFeature[],
+  proj: Projector,
+  clip: RectMm,
+): Scene {
   const primitives: Primitive[] = [];
   for (const { feature, rule } of classified) {
     if (rule.symbol.type !== 'line') continue; // areas: TODO
     const points = feature.geometry.coordinates.map((c) => proj.toPage(c));
-    if (rule.symbol.minLengthMm && pathLengthMm(points) < rule.symbol.minLengthMm) continue;
-    const path: PathPrimitive = {
-      kind: 'path',
-      points,
-      closed: feature.geometry.type === 'Polygon',
-      stroke: { widthMm: rule.symbol.widthMm, dashMm: rule.symbol.dashMm },
-    };
-    primitives.push(path);
+    const isPolygon = feature.geometry.type === 'Polygon';
+    const stroke = { widthMm: rule.symbol.widthMm, dashMm: rule.symbol.dashMm };
+    for (const part of clipPolylineToRect(points, clip, isPolygon)) {
+      if (rule.symbol.minLengthMm && pathLengthMm(part) < rule.symbol.minLengthMm) continue;
+      const path: PathPrimitive = { kind: 'path', points: part, closed: false, stroke };
+      primitives.push(path);
+    }
   }
   return { widthMm: proj.page.widthMm, heightMm: proj.page.heightMm, primitives };
 }

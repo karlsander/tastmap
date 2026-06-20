@@ -1,7 +1,8 @@
 import './styles.css';
 import {
-  coverageBBox,
+  DEFAULT_MARGIN_MM,
   generateMap,
+  renderedBBox,
   streetOverview,
   styles,
   type MapParams,
@@ -23,6 +24,7 @@ const form = el<HTMLFormElement>('map-form');
 const latInput = el<HTMLInputElement>('lat');
 const lngInput = el<HTMLInputElement>('lng');
 const scaleInput = el<HTMLInputElement>('scale');
+const marginInput = el<HTMLInputElement>('margin');
 const paperSelect = el<HTMLSelectElement>('paper');
 const styleSelect = el<HTMLSelectElement>('style');
 const statusEl = el<HTMLParagraphElement>('status');
@@ -49,6 +51,11 @@ function orientation(): Orientation {
   return (checked?.value as Orientation) ?? 'portrait';
 }
 
+function readMargin(): number {
+  const m = parseFloat(marginInput.value);
+  return Number.isFinite(m) && m >= 0 ? m : DEFAULT_MARGIN_MM;
+}
+
 function readParams(): MapParams {
   return {
     center: { lat: parseFloat(latInput.value), lng: parseFloat(lngInput.value) },
@@ -56,6 +63,7 @@ function readParams(): MapParams {
     paper: paperSelect.value as PaperSize,
     orientation: orientation(),
     style: styles[styleSelect.value] ?? streetOverview,
+    marginMm: readMargin(),
   };
 }
 
@@ -66,15 +74,16 @@ function setStatus(message: string): void {
 function refreshFootprint(): void {
   const p = readParams();
   if (Number.isNaN(p.center.lat) || Number.isNaN(p.center.lng) || !p.scaleDenominator) return;
+  // Show the printable area (inside the margins) — what the reader actually gets.
   picker.setFootprint(
-    coverageBBox(
+    renderedBBox(
       {
         center: p.center,
         scaleDenominator: p.scaleDenominator,
         paper: p.paper,
         orientation: p.orientation,
       },
-      1.0,
+      p.marginMm,
     ),
   );
 }
@@ -97,7 +106,7 @@ for (const input of [latInput, lngInput]) {
 }
 
 // Any setting that changes coverage → refresh footprint.
-for (const ctl of [scaleInput, paperSelect]) {
+for (const ctl of [scaleInput, marginInput, paperSelect]) {
   ctl.addEventListener('change', refreshFootprint);
 }
 form.querySelectorAll('input[name="orientation"]').forEach((r) =>
@@ -121,14 +130,14 @@ form.addEventListener('submit', async (e) => {
   generateBtn.disabled = true;
   setStatus('Fetching OpenStreetMap data and rendering…');
   try {
-    const { pdf, featureCount } = await generateMap(params);
+    const { pdf, featureCount, strokeCount } = await generateMap(params);
     const blob = new Blob([pdf as BlobPart], { type: 'application/pdf' });
     if (lastUrl) URL.revokeObjectURL(lastUrl);
     lastUrl = URL.createObjectURL(blob);
     previewEl.src = lastUrl;
     downloadEl.href = lastUrl;
     downloadEl.hidden = false;
-    setStatus(`Done — ${featureCount} features rendered.`);
+    setStatus(`Done — ${featureCount} features matched, ${strokeCount} strokes drawn.`);
   } catch (err) {
     setStatus('Error: ' + (err instanceof Error ? err.message : String(err)));
   } finally {
