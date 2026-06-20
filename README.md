@@ -97,9 +97,11 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 - [ ] Generalization: simplify, enforce minimum feature size & separation.
 - [ ] Area features with tactile **textures** (hatch / dot grids) — fill
       helpers exist in `core/scene/textures`; wire into the area pipeline.
-- [x] Braille labels: collision-aware keyed placement on the map (uncontracted
-      placeholder translator; liblouis contracted-German swap still pending).
+- [x] Braille labels: collision-aware keyed placement on the map.
 - [x] Keyed legend page (braille + ink), paginated.
+- [x] **liblouis** German braille (Vollschrift) in the browser, with the
+      uncontracted placeholder as fallback. Note: liblouis is **GPL-3.0**, so the
+      bundled app inherits GPL.
 - [ ] Scale bar, north indicator, title block (braille + ink).
 - [ ] Sidewalk / crossing detail style.
 

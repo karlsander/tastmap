@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "leaflet": "^1.9.4",
+    "liblouis": "^0.4.0",
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {

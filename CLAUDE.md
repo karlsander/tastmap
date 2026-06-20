@@ -35,10 +35,18 @@ npm run dev | test | typecheck | build
 ## Known TODOs (load-bearing)
 
 Generalization (simplify + min separation), area textures (helpers exist in
-`core/scene/textures` — wire into `buildScene` via `AreaSymbology`), **liblouis**
-(swap the placeholder `Translator` for contracted German), scale bar / north /
-title. Label placement (`core/label`) is proximity-only — leader lines / better
-anchoring may be needed once felt on paper.
+`core/scene/textures` — wire into `buildScene` via `AreaSymbology`), scale bar /
+north / title. Label placement (`core/label`) is proximity-only — leader lines /
+better anchoring may be needed once felt on paper.
+
+**Braille**: liblouis (German Vollschrift) runs in the browser via `ui/liblouis`
+— the emscripten build + easy-api are loaded as classic scripts (`?url`), the
+table closure is written into liblouis' in-memory FS (`?raw`), and output Unicode
+braille is decoded to cells by `core/braille/decode`. Pure adapter
+(`core/braille/liblouis` = `makeLiblouisTranslator`) keeps it behind the
+`Translator` interface; falls back to the placeholder if loading fails. liblouis
+is GPL-3.0 (app inherits GPL). de-de-g2 (Kurzschrift) is bundled too — pass
+grade 2 to switch.
 Line widths in `core/style/defaultStyle.ts` are **unvalidated guesses** until
 tested on a real Schwellpapierkopierer — the **calibration sheet**
 (`core/calibration`, "Calibration sheet" button) exists to drive that tuning.

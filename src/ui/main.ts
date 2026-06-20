@@ -10,6 +10,7 @@ import {
   type MapParams,
   type Orientation,
   type PaperSize,
+  type Translator,
 } from '../core';
 import { createPicker } from './picker';
 
@@ -144,6 +145,16 @@ async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<
   }
 }
 
+// Load the German braille engine lazily in the background (its WASM build +
+// tables are a large chunk); until ready (or if it fails) maps use the built-in
+// uncontracted placeholder translator.
+let translator: Translator | undefined;
+void import('./liblouis')
+  .then((m) => m.loadLiblouisTranslator(1))
+  .then((t) => {
+    if (t) translator = t;
+  });
+
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const params = readParams();
@@ -157,9 +168,10 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, labelCount, pageCount } = await generateMap(params);
+    const { pdf, strokeCount, labelCount, pageCount } = await generateMap({ ...params, translator });
     showPdf(pdf, 'tastmap.pdf');
-    setStatus(`Done — ${strokeCount} strokes, ${labelCount} braille labels, ${pageCount} pages (map + legend).`);
+    const braille = translator ? 'liblouis German' : 'placeholder braille';
+    setStatus(`Done — ${strokeCount} strokes, ${labelCount} labels (${braille}), ${pageCount} pages.`);
   });
 });
 
