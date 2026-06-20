@@ -35,8 +35,10 @@ npm run dev | test | typecheck | build
 ## Known TODOs (load-bearing)
 
 Generalization (simplify + min separation), area textures (helpers exist in
-`core/scene/textures` — wire into `buildScene` via `AreaSymbology`), braille
-labels + keyed legend, scale bar / north / title.
+`core/scene/textures` — wire into `buildScene` via `AreaSymbology`), **liblouis**
+(swap the placeholder `Translator` for contracted German), scale bar / north /
+title. Label placement (`core/label`) is proximity-only — leader lines / better
+anchoring may be needed once felt on paper.
 Line widths in `core/style/defaultStyle.ts` are **unvalidated guesses** until
 tested on a real Schwellpapierkopierer — the **calibration sheet**
 (`core/calibration`, "Calibration sheet" button) exists to drive that tuning.
@@ -50,3 +52,5 @@ parallel-pair, scatter); a condensed **2-page test-sheet gallery**
 print-run evaluation of every
 candidate width/texture/symbol; feed its results back into `defaultStyle.ts`
 and real symbology (`lines`/`textures` are the building blocks to select from).
+Keyed braille labels + paginated legend (`core/label`): named features get short
+braille keys on the map, full names in a legend; multi-page PDF via `renderPdfPages`.

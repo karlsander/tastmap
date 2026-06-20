@@ -1,12 +1,15 @@
 import { buildCalibrationScene, type CalibrationParams } from './calibration';
+import { basicTranslator, type BrailleCell, type Translator } from './braille/translate';
 import { printableRect } from './geo/clip';
 import { DEFAULT_MARGIN_MM, getPageDimensions, getPrintableArea, uniformMargins } from './geo/paper';
 import { bboxFromCenter, groundMeters, makeProjector } from './geo/projection';
 import type { BBox, LngLat, Orientation, PaperSize } from './geo/types';
+import { buildLegendScenes, collectLabelCandidates, placeLabels } from './label';
 import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
 import { renderPdf, renderPdfPages } from './pdf/render';
 import { buildScene } from './scene/build';
+import type { Scene } from './scene/types';
 import { classify } from './style/classify';
 import type { StyleSpec } from './style/types';
 import { buildTestSheets } from './testsheets';
@@ -19,6 +22,12 @@ export interface MapParams {
   style: StyleSpec;
   /** Uniform printable margin in millimetres. Defaults to {@link DEFAULT_MARGIN_MM}. */
   marginMm?: number;
+  /** Place keyed braille labels + a legend page. Default true. */
+  labels?: boolean;
+  /** Braille translator (default: uncontracted placeholder; swap for liblouis). */
+  translator?: Translator;
+  /** Cap on placed labels to keep the map legible. */
+  maxLabels?: number;
   overpassEndpoint?: string;
   signal?: AbortSignal;
 }
@@ -31,6 +40,10 @@ export interface MapResult {
    *  sub-threshold parts. Lower than featureCount when features fall in the
    *  margin; can exceed it when a feature is clipped into several pieces. */
   strokeCount: number;
+  /** Keyed braille labels placed on the map. */
+  labelCount: number;
+  /** Total PDF pages (map + any legend pages). */
+  pageCount: number;
 }
 
 /** Fetch slightly beyond the page so edge features aren't cut off mid-render. */
@@ -78,10 +91,23 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   const features = normalize(res);
   const projector = makeProjector(params.center, params.scaleDenominator, dim);
   const classified = classify(features, params.style);
-  const scene = buildScene(classified, projector, printableRect(dim, margins));
-  const pdf = await renderPdf(scene);
+  const clip = printableRect(dim, margins);
+  const scene = buildScene(classified, projector, clip);
+  const strokeCount = scene.primitives.length;
 
-  return { pdf, featureCount: classified.length, strokeCount: scene.primitives.length };
+  let labelCount = 0;
+  let legendPages: Scene[] = [];
+  if (params.labels !== false) {
+    const translate = (s: string): BrailleCell[] => (params.translator ?? basicTranslator).translate(s);
+    const candidates = collectLabelCandidates(classified, projector, clip);
+    const { placed } = placeLabels(candidates, clip, translate, params.maxLabels);
+    for (const pl of placed) scene.primitives.push(...pl.dots);
+    legendPages = buildLegendScenes(placed, params.paper, params.marginMm ?? DEFAULT_MARGIN_MM, translate);
+    labelCount = placed.length;
+  }
+
+  const pdf = await renderPdfPages([scene, ...legendPages]);
+  return { pdf, featureCount: classified.length, strokeCount, labelCount, pageCount: 1 + legendPages.length };
 }
 
 /** Render the calibration sheet to PDF bytes — no network, purely local. */

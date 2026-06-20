@@ -157,9 +157,9 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, featureCount, strokeCount } = await generateMap(params);
+    const { pdf, strokeCount, labelCount, pageCount } = await generateMap(params);
     showPdf(pdf, 'tastmap.pdf');
-    setStatus(`Done — ${featureCount} features matched, ${strokeCount} strokes drawn.`);
+    setStatus(`Done — ${strokeCount} strokes, ${labelCount} braille labels, ${pageCount} pages (map + legend).`);
   });
 });
 

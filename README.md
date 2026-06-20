@@ -97,8 +97,9 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 - [ ] Generalization: simplify, enforce minimum feature size & separation.
 - [ ] Area features with tactile **textures** (hatch / dot grids) — fill
       helpers exist in `core/scene/textures`; wire into the area pipeline.
-- [ ] Braille labels via liblouis + collision-aware placement.
-- [ ] Keyed legend page (braille + ink).
+- [x] Braille labels: collision-aware keyed placement on the map (uncontracted
+      placeholder translator; liblouis contracted-German swap still pending).
+- [x] Keyed legend page (braille + ink), paginated.
 - [ ] Scale bar, north indicator, title block (braille + ink).
 - [ ] Sidewalk / crossing detail style.
 

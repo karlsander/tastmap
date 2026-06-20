@@ -7,6 +7,9 @@ export { beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, w
 export { renderPdf, renderPdfPages } from './pdf/render';
 export { buildCalibrationScene } from './calibration';
 export type { CalibrationParams } from './calibration';
+export { basicTranslator } from './braille/translate';
+export type { Translator } from './braille/translate';
+export { collectLabelCandidates, placeLabels, buildLegendScenes, keyFor } from './label';
 export { buildTestSheets } from './testsheets';
 export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets } from './pipeline';
 export type { MapParams, MapResult, CoverageParams } from './pipeline';
