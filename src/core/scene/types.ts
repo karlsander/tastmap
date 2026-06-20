@@ -10,6 +10,10 @@ export interface PathPrimitive {
   points: PointMm[];
   closed: boolean;
   stroke?: StrokeStyle;
+  /** Fill the (closed) path solid black. Tactile areas should normally use a
+   *  texture, not a solid — solids are here mainly to test how large black
+   *  regions behave on the fuser. A path may be both filled and stroked. */
+  fill?: boolean;
 }
 
 /** A single raised braille dot. */

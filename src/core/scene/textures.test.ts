@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RectMm } from '../geo/types';
-import { crossHatchFill, dotFill, hatchFill, rectOutline } from './textures';
+import { crossHatchFill, dotFill, filledPolygon, filledRect, hatchFill, rectOutline } from './textures';
 
 const RECT: RectMm = { minX: 0, minY: 0, maxX: 20, maxY: 10 };
 const within = (rect: RectMm, x: number, y: number): boolean =>
@@ -64,5 +64,26 @@ describe('rectOutline', () => {
       { x: 20, y: 10 },
       { x: 0, y: 10 },
     ]);
+  });
+});
+
+describe('filledRect / filledPolygon', () => {
+  it('filledRect is a closed, filled, unstroked 4-corner path', () => {
+    const f = filledRect(RECT);
+    expect(f.closed).toBe(true);
+    expect(f.fill).toBe(true);
+    expect(f.stroke).toBeUndefined();
+    expect(f.points).toHaveLength(4);
+  });
+
+  it('filledPolygon keeps the given corners as a closed filled path', () => {
+    const tri = filledPolygon([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 5, y: 8 },
+    ]);
+    expect(tri.fill).toBe(true);
+    expect(tri.closed).toBe(true);
+    expect(tri.points).toHaveLength(3);
   });
 });

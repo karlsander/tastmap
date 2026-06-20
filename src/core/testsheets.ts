@@ -5,7 +5,7 @@ import { getPageDimensions, uniformMargins } from './geo/paper';
 import type { PointMm, RectMm } from './geo/types';
 import { createPage, type Page } from './scene/layout';
 import { beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './scene/lines';
-import { crossHatchFill, dotFill, hatchFill, rectOutline } from './scene/textures';
+import { crossHatchFill, dotFill, filledPolygon, filledRect, hatchFill, rectOutline } from './scene/textures';
 import type { Primitive, Scene } from './scene/types';
 
 /**
@@ -186,7 +186,26 @@ function linesAndPatternsPage(): Scene {
   let y = Math.max(yl, yr) + 5;
   p.text('patterns   texture · water · park · contrast', A.minX, y, SEC);
   y += 4;
-  swatchGrid(p, TEXTURES, A.minX, y, A.maxX, 34, 15);
+  y = swatchGrid(p, TEXTURES, A.minX, y, A.maxX, 34, 15);
+
+  // Solid black shapes — do large filled areas swell flat / bleed / warp?
+  y += 3;
+  p.text('solids   do large black areas swell flat / bleed / warp?', A.minX, y, SEC);
+  y += 4;
+  const baseline = y + 25 + 2.6;
+  let sx = A.minX;
+  for (const s of [8, 12, 16, 20, 25]) {
+    p.add(filledRect({ minX: sx, minY: y, maxX: sx + s, maxY: y + s }));
+    p.text(String(s), sx, baseline, TINY);
+    sx += s + 6;
+  }
+  const cr = 12.5;
+  p.add({ kind: 'dot', center: at(sx + cr, y + cr), radiusMm: cr });
+  p.text(`circ ${2 * cr}`, sx, baseline, TINY);
+  sx += 2 * cr + 6;
+  const tw = 26;
+  p.add(filledPolygon([at(sx, y + 25), at(sx + tw, y + 25), at(sx + tw / 2, y)]));
+  p.text('tri', sx, baseline, TINY);
   return p.scene();
 }
 
@@ -382,7 +401,7 @@ function mapPage(): Scene {
     p.add(...dotFill(plat, { spacingMm: 2.8, radiusMm: 0.55 }));
     entry(plat);
   };
-  detailRow(p, A, y, 'tram boarding', 24, [
+  y = detailRow(p, A, y, 'tram boarding', 24, [
     {
       l: 'arrow',
       draw: (c) =>
@@ -412,6 +431,15 @@ function mapPage(): Scene {
         }),
     },
   ]);
+
+  // Large solids in the leftover space.
+  y += 3;
+  p.text('solids (large black)', A.minX, y, SEC);
+  y += 4;
+  p.add(filledRect({ minX: A.minX, minY: y, maxX: A.minX + 30, maxY: y + 24 }));
+  p.text('30×24', A.minX, y + 24 + 2.6, TINY);
+  p.add({ kind: 'dot', center: at(A.minX + 36 + 12, y + 12), radiusMm: 12 });
+  p.text('circ 24', A.minX + 36, y + 24 + 2.6, TINY);
   return p.scene();
 }
 

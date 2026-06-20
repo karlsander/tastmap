@@ -93,3 +93,24 @@ export function rectOutline(rect: RectMm, widthMm: number): PathPrimitive {
     ],
   };
 }
+
+/** A solid black rectangle. (Tactile areas normally need texture, not solid —
+ *  use this for testing how large black regions behave on the fuser.) */
+export function filledRect(rect: RectMm): PathPrimitive {
+  return {
+    kind: 'path',
+    closed: true,
+    fill: true,
+    points: [
+      { x: rect.minX, y: rect.minY },
+      { x: rect.maxX, y: rect.minY },
+      { x: rect.maxX, y: rect.maxY },
+      { x: rect.minX, y: rect.maxY },
+    ],
+  };
+}
+
+/** A solid black polygon (e.g. a triangle) from its corner points. */
+export function filledPolygon(points: PointMm[]): PathPrimitive {
+  return { kind: 'path', closed: true, fill: true, points };
+}
