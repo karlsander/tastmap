@@ -23,6 +23,19 @@ export function segment(a: PointMm, b: PointMm, widthMm: number, dashMm?: number
   return { kind: 'path', closed: false, points: [a, b], stroke: { widthMm, ...(dashMm ? { dashMm } : {}) } };
 }
 
+/** Points along a circular arc (degrees), for smooth bends — curved roads,
+ *  roundabouts, or rounded corners. */
+export function arcPoints(cx: number, cy: number, r: number, a0Deg: number, a1Deg: number, n = 10): PointMm[] {
+  const a0 = (a0Deg * Math.PI) / 180;
+  const a1 = (a1Deg * Math.PI) / 180;
+  const out: PointMm[] = [];
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + (a1 - a0) * (i / n);
+    out.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  }
+  return out;
+}
+
 /** A sinusoidal path from a to b — a candidate river / watercourse style. */
 export function wavyPath(
   a: PointMm,

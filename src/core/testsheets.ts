@@ -4,9 +4,9 @@ import { printableRect } from './geo/clip';
 import { getPageDimensions, uniformMargins } from './geo/paper';
 import type { PointMm, RectMm } from './geo/types';
 import { createPage, type Page } from './scene/layout';
-import { beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './scene/lines';
+import { arcPoints, beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './scene/lines';
 import { crossHatchFill, dotFill, filledPolygon, filledRect, hatchFill, rectOutline } from './scene/textures';
-import type { Primitive, Scene } from './scene/types';
+import type { PathPrimitive, Primitive, Scene } from './scene/types';
 
 /**
  * A compact, printable tactile test gallery on just two A4 pages — swell paper
@@ -108,7 +108,7 @@ function linesAndPatternsPage(): Scene {
   p.text('1 LINES & PATTERNS   width · step · braille · dash · separation · dots · textures', A.minX, A.minY + 3, 3);
   const colL = A.minX;
   const colR = A.minX + 100;
-  const len = 44;
+  const len = 80; // ink is cheap — use most of the half-page width
 
   // Left column.
   let yl = A.minY + 8;
@@ -127,8 +127,8 @@ function linesAndPatternsPage(): Scene {
   for (const [a, b] of [[0.4, 0.6], [0.5, 0.7], [0.6, 0.8], [0.8, 1.0]] as [number, number][]) {
     const h = 6;
     const my = yl + h / 2;
-    p.add(segment(at(colL, my - 1.1), at(colL + 24, my - 1.1), a), segment(at(colL, my + 1.1), at(colL + 24, my + 1.1), b));
-    p.text(`${a}/${b}`, colL + 28, my + 0.8, TINY);
+    p.add(segment(at(colL, my - 1.1), at(colL + 64, my - 1.1), a), segment(at(colL, my + 1.1), at(colL + 64, my + 1.1), b));
+    p.text(`${a}/${b}`, colL + 68, my + 0.8, TINY);
     yl += h;
   }
   yl += 2;
@@ -269,6 +269,21 @@ function drawJunction(p: Page, ox: number, oy: number): void {
   p.text('1 casing 2 junction 3 crossing 4 walk 5 curb 6 tram 7 stop 8 board', ox, botEnd + 5, 2.1);
 }
 
+/** A thick stroked sample with a smooth curve and a sharp corner, sized to a
+ *  cell — to test how wide lines behave around bends and angles. */
+function curvedCornerSample(box: RectMm, widthMm: number): PathPrimitive {
+  const bx = box.minX;
+  const by = box.minY;
+  const bottomY = by + 25;
+  const r = 7;
+  const a = at(bx + 3, bottomY); // bottom-left start
+  const arc = arcPoints(bx + 11, bottomY - r, r, 90, 0, 8); // horizontal → vertical
+  const c = arc[arc.length - 1];
+  const d = at(c.x, by + 9); // up the vertical
+  const e = at(bx + 27, by + 9); // sharp corner → horizontal
+  return { kind: 'path', closed: false, points: [a, ...arc, d, e], stroke: { widthMm } };
+}
+
 interface Variation {
   l: string;
   draw: (c: RectMm) => void;
@@ -322,16 +337,16 @@ function mapPage(): Scene {
   let y = A.minY + 110;
   p.text('hierarchy   single | casing', A.minX, y, SEC);
   y += 4;
-  drawNet(p, A.minX, y, 66, 40, false);
-  drawNet(p, A.minX + 92, y, 66, 40, true);
-  y += 44;
+  drawNet(p, A.minX, y, 66, 34, false);
+  drawNet(p, A.minX + 92, y, 66, 34, true);
+  y += 38;
 
   // Detail options.
   const B = 3;
   const roadAcross = (c: RectMm, my: number): void => {
     p.add(segment(at(c.minX, my - B), at(c.maxX, my - B), 0.5), segment(at(c.minX, my + B), at(c.maxX, my + B), 0.5));
   };
-  y = detailRow(p, A, y, 'crossing', 15, [
+  y = detailRow(p, A, y, 'crossing', 14, [
     {
       l: 'zebra',
       draw: (c) => {
@@ -361,7 +376,7 @@ function mapPage(): Scene {
     },
   ]);
 
-  y = detailRow(p, A, y, 'sidewalk start', 15, [
+  y = detailRow(p, A, y, 'sidewalk start', 14, [
     {
       l: 'tick',
       draw: (c) => {
@@ -401,7 +416,7 @@ function mapPage(): Scene {
     p.add(...dotFill(plat, { spacingMm: 2.8, radiusMm: 0.55 }));
     entry(plat);
   };
-  y = detailRow(p, A, y, 'tram boarding', 24, [
+  y = detailRow(p, A, y, 'tram boarding', 22, [
     {
       l: 'arrow',
       draw: (c) =>
@@ -432,14 +447,23 @@ function mapPage(): Scene {
     },
   ]);
 
-  // Large solids in the leftover space.
-  y += 3;
-  p.text('solids (large black)', A.minX, y, SEC);
-  y += 4;
-  p.add(filledRect({ minX: A.minX, minY: y, maxX: A.minX + 30, maxY: y + 24 }));
-  p.text('30×24', A.minX, y + 24 + 2.6, TINY);
-  p.add({ kind: 'dot', center: at(A.minX + 36 + 12, y + 12), radiusMm: 12 });
-  p.text('circ 24', A.minX + 36, y + 24 + 2.6, TINY);
+  // Bottom band: solids on the left, thick curved lines on the right.
+  const by = y + 3;
+  const sy = by + 4;
+  const labelY = sy + 30 + 2.6;
+  p.text('solids', A.minX, by, SEC);
+  p.add(filledRect({ minX: A.minX, minY: sy, maxX: A.minX + 30, maxY: sy + 24 }));
+  p.text('30×24', A.minX, labelY, TINY);
+  p.add({ kind: 'dot', center: at(A.minX + 44, sy + 11), radiusMm: 11 });
+  p.text('circ 22', A.minX + 34, labelY, TINY);
+
+  p.text('thick curves (mm) · curve + corner', A.minX + 68, by, SEC);
+  let cxp = A.minX + 68;
+  for (const w of [2, 3, 4, 5]) {
+    p.add(curvedCornerSample({ minX: cxp, minY: sy, maxX: cxp + 28, maxY: sy + 30 }, w));
+    p.text(String(w), cxp, labelY, TINY);
+    cxp += 30;
+  }
   return p.scene();
 }
 
