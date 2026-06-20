@@ -1,0 +1,94 @@
+:root {
+  --gap: 1rem;
+  --maxw: 60rem;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #111;
+  background: #fff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0 auto;
+  max-width: var(--maxw);
+  padding: var(--gap);
+}
+
+header p {
+  max-width: 50ch;
+}
+
+main {
+  display: grid;
+  gap: calc(var(--gap) * 2);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 60rem) {
+  main {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+fieldset {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  margin: 0 0 var(--gap);
+  padding: var(--gap);
+}
+
+legend {
+  font-weight: 600;
+  padding: 0 0.4em;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field input,
+.field select {
+  padding: 0.4rem;
+  font-size: 1rem;
+}
+
+.orientation label {
+  margin-right: 1rem;
+}
+
+#picker {
+  height: 18rem;
+  margin-bottom: var(--gap);
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.6rem 1.2rem;
+  cursor: pointer;
+}
+
+#preview {
+  width: 100%;
+  height: 40rem;
+  border: 1px solid #ccc;
+}
+
+/* Visible focus everywhere — do not remove. */
+:focus-visible {
+  outline: 3px solid #0050c8;
+  outline-offset: 2px;
+}

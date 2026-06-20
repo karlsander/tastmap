@@ -1,0 +1,42 @@
+import type { PointMm } from '../geo/types';
+
+export interface StrokeStyle {
+  widthMm: number;
+  dashMm?: number[];
+}
+
+export interface PathPrimitive {
+  kind: 'path';
+  points: PointMm[];
+  closed: boolean;
+  stroke?: StrokeStyle;
+}
+
+/** A single raised braille dot. */
+export interface DotPrimitive {
+  kind: 'dot';
+  center: PointMm;
+  radiusMm: number;
+}
+
+/** Human-readable ink text (tactile maps carry print alongside braille so a
+ *  sighted helper can assist). Rendered by the PDF backend with an embedded font. */
+export interface TextPrimitive {
+  kind: 'text';
+  origin: PointMm; // left end of the text baseline
+  text: string;
+  sizeMm: number;
+}
+
+export type Primitive = PathPrimitive | DotPrimitive | TextPrimitive;
+
+/**
+ * The canonical render model: everything in page millimetres, all black.
+ * The PDF backend is the only consumer for now; keeping this explicit makes the
+ * cartography unit-testable without parsing PDF bytes.
+ */
+export interface Scene {
+  widthMm: number;
+  heightMm: number;
+  primitives: Primitive[];
+}
