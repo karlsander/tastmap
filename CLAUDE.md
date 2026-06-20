@@ -42,4 +42,9 @@ tested on a real Schwellpapierkopierer — the **calibration sheet**
 (`core/calibration`, "Calibration sheet" button) exists to drive that tuning.
 
 Done: clipping + margins (`core/geo/clip`); calibration sheet; ink text in the
-PDF backend (pdf-lib StandardFonts).
+PDF backend (pdf-lib StandardFonts); multi-page PDFs (`renderPdfPages`); a
+tactile line/area vocabulary (`core/scene/lines` — wavy, beaded, ladder,
+parallel-pair, scatter); an 8-page **test-sheet gallery** (`core/testsheets`,
+"Test sheets" button, `scripts/testsheets.ts`) for print-run evaluation of every
+candidate width/texture/symbol — feed its results back into `defaultStyle.ts`
+and real symbology (`lines`/`textures` are the building blocks to select from).

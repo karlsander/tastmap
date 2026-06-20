@@ -5,10 +5,11 @@ import { bboxFromCenter, groundMeters, makeProjector } from './geo/projection';
 import type { BBox, LngLat, Orientation, PaperSize } from './geo/types';
 import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
-import { renderPdf } from './pdf/render';
+import { renderPdf, renderPdfPages } from './pdf/render';
 import { buildScene } from './scene/build';
 import { classify } from './style/classify';
 import type { StyleSpec } from './style/types';
+import { buildTestSheets } from './testsheets';
 
 export interface MapParams {
   center: LngLat;
@@ -86,4 +87,9 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
 /** Render the calibration sheet to PDF bytes — no network, purely local. */
 export async function renderCalibration(params: CalibrationParams): Promise<Uint8Array> {
   return renderPdf(buildCalibrationScene(params));
+}
+
+/** Render the full multi-page tactile test-sheet gallery — no network. */
+export async function renderTestSheets(): Promise<Uint8Array> {
+  return renderPdfPages(buildTestSheets());
 }

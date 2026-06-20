@@ -12,12 +12,24 @@ type Transform = (n: number) => number;
  * Render the scene to a single-page PDF at exact physical size.
  * Scene space is top-left/y-down/mm; PDF space is bottom-left/y-up/points.
  */
+/** Render a single scene to a one-page PDF at exact physical size. */
 export async function renderPdf(scene: Scene): Promise<Uint8Array> {
+  return renderPdfPages([scene]);
+}
+
+/** Render several scenes to a multi-page PDF (one scene per page). Used for the
+ *  calibration / test-sheet galleries and, later, the keyed legend page. */
+export async function renderPdfPages(scenes: Scene[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   // Helvetica is one of pdf-lib's built-in standard fonts, so ink labels need no
   // embedded font file. Tactile sheets carry print alongside braille so a sighted
   // helper can read along.
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (const scene of scenes) drawScene(doc, font, scene);
+  return doc.save();
+}
+
+function drawScene(doc: PDFDocument, font: PDFFont, scene: Scene): void {
   const pageHeightPt = toPt(scene.heightMm);
   const page = doc.addPage([toPt(scene.widthMm), pageHeightPt]);
 
@@ -29,8 +41,6 @@ export async function renderPdf(scene: Scene): Promise<Uint8Array> {
     else if (prim.kind === 'dot') drawDot(page, prim, X, Y);
     else if (prim.kind === 'text') drawText(page, prim, font, X, Y);
   }
-
-  return doc.save();
 }
 
 function drawPath(page: PDFPage, prim: PathPrimitive, X: Transform, Y: Transform): void {

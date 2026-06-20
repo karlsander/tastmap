@@ -3,6 +3,7 @@ import {
   DEFAULT_MARGIN_MM,
   generateMap,
   renderCalibration,
+  renderTestSheets,
   renderedBBox,
   streetOverview,
   styles,
@@ -33,6 +34,7 @@ const downloadEl = el<HTMLAnchorElement>('download');
 const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
 const calibrateBtn = el<HTMLButtonElement>('calibrate');
+const testSheetsBtn = el<HTMLButtonElement>('testsheets');
 
 // Populate the style dropdown from the registry.
 for (const spec of Object.values(styles)) {
@@ -130,16 +132,15 @@ function showPdf(pdf: Uint8Array, downloadName: string): void {
 
 /** Run an async PDF producer while disabling the buttons and reporting status. */
 async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<void> {
-  generateBtn.disabled = true;
-  calibrateBtn.disabled = true;
+  const buttons = [generateBtn, calibrateBtn, testSheetsBtn];
+  for (const b of buttons) b.disabled = true;
   setStatus(busyMessage);
   try {
     await run();
   } catch (err) {
     setStatus('Error: ' + (err instanceof Error ? err.message : String(err)));
   } finally {
-    generateBtn.disabled = false;
-    calibrateBtn.disabled = false;
+    for (const b of buttons) b.disabled = false;
   }
 }
 
@@ -167,6 +168,14 @@ calibrateBtn.addEventListener('click', () => {
     const pdf = await renderCalibration({ paper: paperSelect.value as PaperSize, marginMm: readMargin() });
     showPdf(pdf, 'tastmap-calibration.pdf');
     setStatus('Done — calibration sheet. Print on Schwellpapier, fuse, then feel each row.');
+  });
+});
+
+testSheetsBtn.addEventListener('click', () => {
+  void withBusy('Rendering test-sheet gallery…', async () => {
+    const pdf = await renderTestSheets();
+    showPdf(pdf, 'tastmap-test-sheets.pdf');
+    setStatus('Done — 8-page test gallery. Print all, fuse, and feel what works.');
   });
 });
 
