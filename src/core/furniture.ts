@@ -2,7 +2,7 @@ import { layoutCells } from './braille/dots';
 import type { BrailleCell } from './braille/translate';
 import type { PointMm, RectMm } from './geo/types';
 import { segment } from './scene/lines';
-import type { PathPrimitive, Primitive, TextPrimitive } from './scene/types';
+import type { Primitive, TextPrimitive } from './scene/types';
 
 /**
  * Map furniture for the bottom band of a map page: a title block, a scale bar,
@@ -35,10 +35,11 @@ const text = (s: string, x: number, y: number, sizeMm: number): TextPrimitive =>
 });
 
 /**
- * A simple four-point compass star for the furniture band: cardinal points
- * (N/E/S/W) drawn as a thin outline, with only the north point filled black so
- * it reads as "north" without much mass. Centred at (cx, cy); points reach `R`,
- * the valleys between them sit at radius `rV`.
+ * A classic two-tone four-point compass star for the furniture band: the whole
+ * star drawn as a thin outline, with the counter-clockwise half of every point
+ * filled black — the recognisable "pinwheel" of a map compass rose. North is
+ * marked only by the "N" label above (drawn by the caller); the other points
+ * are unlabelled. Centred at (cx, cy); points reach `R`, valleys sit at `rV`.
  */
 function compassRose(cx: number, cy: number, R: number, rV: number): Primitive[] {
   // Angle measured clockwise from up (north), so the geometry matches the map.
@@ -46,6 +47,7 @@ function compassRose(cx: number, cy: number, R: number, rV: number): Primitive[]
     const a = (deg * Math.PI) / 180;
     return at(cx + rad * Math.sin(a), cy - rad * Math.cos(a));
   };
+  const o = at(cx, cy);
 
   // Outline: 8 vertices — each cardinal tip followed by the valley to the next.
   const ring: PointMm[] = [];
@@ -53,10 +55,13 @@ function compassRose(cx: number, cy: number, R: number, rV: number): Primitive[]
     ring.push(pt(i * 90, R));
     ring.push(pt(i * 90 + 45, rV));
   }
-  const star: PathPrimitive = { kind: 'path', points: ring, closed: true, stroke: { widthMm: 0.4 } };
-  // Fill the north point only — the triangle between the valleys flanking N.
-  const north: PathPrimitive = { kind: 'path', points: [pt(315, rV), pt(0, R), pt(45, rV)], closed: true, fill: true };
-  return [star, north];
+  const out: Primitive[] = [{ kind: 'path', points: ring, closed: true, stroke: { widthMm: 0.4 } }];
+
+  // Fill the counter-clockwise half of each point (tip → CCW valley → centre).
+  for (let i = 0; i < 4; i++) {
+    out.push({ kind: 'path', points: [pt(i * 90, R), pt(i * 90 - 45, rV), o], closed: true, fill: true });
+  }
+  return out;
 }
 
 export function buildFurniture(area: RectMm, opts: FurnitureOptions): Primitive[] {
@@ -85,7 +90,7 @@ export function buildFurniture(area: RectMm, opts: FurnitureOptions): Primitive[
   const R = 6;
   const cx = area.maxX - 13;
   const cy = area.minY + 11;
-  out.push(...compassRose(cx, cy, R, 2.2));
+  out.push(...compassRose(cx, cy, R, 1.9));
   out.push(text('N', cx - 1, cy - R - 1.3, 3.2)); // centred above the north tip
   out.push(...layoutCells(opts.translate('n'), at(cx + R + 1.5, cy - 2.5)));
 
