@@ -63,11 +63,12 @@ finger and usable even in small areas:
 ## Calibration workflow
 
 1. Generate the **Test sheets** (3 pages: lines / map / textures) and
-   **Calibration sheet**; tick **Ghost text** to print the fuse-ready, label-free
-   version (heated text turns to mush); keep the normal PDF as the key.
+   **Calibration sheet**; print, fuse (text raises fine — no special handling
+   needed).
 2. Fuse, feel, and record what reads → update `vocabulary.ts` and this file.
 3. Open questions still on the test sheets to settle (all on p3 now): the **rail**
    line type; textured **landmass edges** (outline vs raw); **lines through
    textures** with a **2 mm clearing** (over h45 / x2 / dots2.5); **cross-hatch
-   "solid"** density (x1 vs x0.5); **icon strength** (0.4/0.8/1.4 mm); plus min
+   "solid"** density (x1 vs x0.5); **icon strength** (0.4/0.8/1.4 mm); **braille
+   dot size** (1.5 / 1.3 / 1.1 mm, Marburg spacing); plus min
    feature **separation** for generalization and braille dot legibility.

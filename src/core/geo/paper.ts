@@ -18,8 +18,8 @@ const PAPER_PORTRAIT: Record<PaperSize, PageDimensions> = {
   A3: { widthMm: 297, heightMm: 420 },
 };
 
-/** Conservative default; most consumer printers cannot print to the edge. */
-export const DEFAULT_MARGIN_MM = 10;
+/** Default printable margin; small since the fuser handles near-edge content. */
+export const DEFAULT_MARGIN_MM = 5;
 
 export function uniformMargins(mm = DEFAULT_MARGIN_MM): Margins {
   return { top: mm, right: mm, bottom: mm, left: mm };

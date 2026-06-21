@@ -15,18 +15,18 @@
       <form id="map-form" novalidate>
         <fieldset>
           <legend>Location</legend>
-          <p id="picker-help">Drag the marker or click the map to choose the centre of the map.</p>
-          <div id="picker" role="application" aria-label="Map location picker" aria-describedby="picker-help"></div>
+          <p id="picker-help">Search for an address, or drag the marker / click the map to choose the centre.</p>
           <div class="row">
-            <span class="field">
-              <label for="lat">Latitude</label>
-              <input id="lat" name="lat" type="number" step="any" inputmode="decimal" autocomplete="off" />
+            <span class="field grow">
+              <label for="search">Address search</label>
+              <input id="search" name="search" type="text" autocomplete="off" placeholder="e.g. Marktplatz, Marburg" />
             </span>
             <span class="field">
-              <label for="lng">Longitude</label>
-              <input id="lng" name="lng" type="number" step="any" inputmode="decimal" autocomplete="off" />
+              <label aria-hidden="true">&nbsp;</label>
+              <button type="button" id="searchbtn">Search</button>
             </span>
           </div>
+          <div id="picker" role="application" aria-label="Map location picker" aria-describedby="picker-help"></div>
         </fieldset>
 
         <fieldset>
@@ -38,7 +38,7 @@
             </span>
             <span class="field">
               <label for="margin">Margin (mm)</label>
-              <input id="margin" name="margin" type="number" min="0" step="1" value="10" />
+              <input id="margin" name="margin" type="number" min="0" step="1" value="5" />
             </span>
             <span class="field">
               <label for="paper">Paper size</label>
@@ -65,14 +65,10 @@
           </fieldset>
         </fieldset>
 
-        <p class="field checkbox">
-          <label><input type="checkbox" id="ghost" /> Ghost text (text → empty boxes, for fusing — print the normal version as the key)</label>
-        </p>
         <div class="actions">
           <button type="submit" id="generate">Generate PDF</button>
           <button type="button" id="calibrate">Calibration sheet</button>
           <button type="button" id="testsheets">Test sheets</button>
-          <button type="button" id="demomap">Demo map</button>
         </div>
       </form>
 

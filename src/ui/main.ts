@@ -3,7 +3,6 @@ import {
   DEFAULT_MARGIN_MM,
   generateMap,
   renderCalibration,
-  renderDemoMap,
   renderTestSheets,
   renderedBBox,
   streetOverview,
@@ -13,6 +12,7 @@ import {
   type PaperSize,
   type Translator,
 } from '../core';
+import { geocode } from './geocode';
 import { createPicker } from './picker';
 
 // Marburg — fitting home of the braille standard we target.
@@ -25,8 +25,8 @@ const el = <T extends HTMLElement>(id: string): T => {
 };
 
 const form = el<HTMLFormElement>('map-form');
-const latInput = el<HTMLInputElement>('lat');
-const lngInput = el<HTMLInputElement>('lng');
+const searchInput = el<HTMLInputElement>('search');
+const searchBtn = el<HTMLButtonElement>('searchbtn');
 const scaleInput = el<HTMLInputElement>('scale');
 const marginInput = el<HTMLInputElement>('margin');
 const titleInput = el<HTMLInputElement>('title');
@@ -38,8 +38,6 @@ const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
 const calibrateBtn = el<HTMLButtonElement>('calibrate');
 const testSheetsBtn = el<HTMLButtonElement>('testsheets');
-const demoMapBtn = el<HTMLButtonElement>('demomap');
-const ghostCheckbox = el<HTMLInputElement>('ghost');
 
 // Populate the style dropdown from the registry.
 for (const spec of Object.values(styles)) {
@@ -49,9 +47,6 @@ for (const spec of Object.values(styles)) {
   styleSelect.append(opt);
 }
 styleSelect.value = streetOverview.id;
-
-latInput.value = DEFAULT_CENTER.lat.toFixed(5);
-lngInput.value = DEFAULT_CENTER.lng.toFixed(5);
 
 const picker = createPicker(el('picker'), DEFAULT_CENTER);
 
@@ -67,7 +62,7 @@ function readMargin(): number {
 
 function readParams(): MapParams {
   return {
-    center: { lat: parseFloat(latInput.value), lng: parseFloat(lngInput.value) },
+    center: picker.getCenter(),
     scaleDenominator: parseInt(scaleInput.value, 10),
     paper: paperSelect.value as PaperSize,
     orientation: orientation(),
@@ -83,45 +78,52 @@ function setStatus(message: string): void {
 
 function refreshFootprint(): void {
   const p = readParams();
-  if (Number.isNaN(p.center.lat) || Number.isNaN(p.center.lng) || !p.scaleDenominator) return;
+  if (!p.scaleDenominator) return;
   // Show the printable area (inside the margins) — what the reader actually gets.
   picker.setFootprint(
     renderedBBox(
-      {
-        center: p.center,
-        scaleDenominator: p.scaleDenominator,
-        paper: p.paper,
-        orientation: p.orientation,
-      },
+      { center: p.center, scaleDenominator: p.scaleDenominator, paper: p.paper, orientation: p.orientation },
       p.marginMm,
     ),
   );
 }
 
-// Marker drag/click → sync inputs, refresh footprint.
-picker.onCenterChange((c) => {
-  latInput.value = c.lat.toFixed(5);
-  lngInput.value = c.lng.toFixed(5);
-  refreshFootprint();
-});
-
-// Typed coordinates → move marker (no callback) and refresh.
-for (const input of [latInput, lngInput]) {
-  input.addEventListener('change', () => {
-    const lat = parseFloat(latInput.value);
-    const lng = parseFloat(lngInput.value);
-    if (!Number.isNaN(lat) && !Number.isNaN(lng)) picker.setCenter({ lat, lng });
-    refreshFootprint();
-  });
-}
+picker.onCenterChange(() => refreshFootprint());
 
 // Any setting that changes coverage → refresh footprint.
 for (const ctl of [scaleInput, marginInput, paperSelect]) {
   ctl.addEventListener('change', refreshFootprint);
 }
-form.querySelectorAll('input[name="orientation"]').forEach((r) =>
-  r.addEventListener('change', refreshFootprint),
-);
+form.querySelectorAll('input[name="orientation"]').forEach((r) => r.addEventListener('change', refreshFootprint));
+
+// --- Address search (geocode → recentre) ---
+async function runSearch(): Promise<void> {
+  const q = searchInput.value.trim();
+  if (!q) return;
+  searchBtn.disabled = true;
+  setStatus(`Searching for “${q}”…`);
+  try {
+    const result = await geocode(q);
+    if (!result) {
+      setStatus(`No match for “${q}”.`);
+      return;
+    }
+    picker.setCenter(result.center);
+    refreshFootprint();
+    setStatus(`Location: ${result.displayName}`);
+  } catch (err) {
+    setStatus('Search error: ' + (err instanceof Error ? err.message : String(err)));
+  } finally {
+    searchBtn.disabled = false;
+  }
+}
+searchBtn.addEventListener('click', () => void runSearch());
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault(); // don't submit the form
+    void runSearch();
+  }
+});
 
 let lastUrl: string | null = null;
 
@@ -138,7 +140,7 @@ function showPdf(pdf: Uint8Array, downloadName: string): void {
 
 /** Run an async PDF producer while disabling the buttons and reporting status. */
 async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<void> {
-  const buttons = [generateBtn, calibrateBtn, testSheetsBtn, demoMapBtn];
+  const buttons = [generateBtn, calibrateBtn, testSheetsBtn];
   for (const b of buttons) b.disabled = true;
   setStatus(busyMessage);
   try {
@@ -163,17 +165,13 @@ void import('./liblouis')
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const params = readParams();
-  if (Number.isNaN(params.center.lat) || Number.isNaN(params.center.lng)) {
-    setStatus('Please choose a location.');
-    return;
-  }
   if (!params.scaleDenominator || params.scaleDenominator < 1) {
     setStatus('Please enter a valid scale.');
     return;
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, labelCount, pageCount } = await generateMap({ ...params, translator, ghostText: ghostCheckbox.checked });
+    const { pdf, strokeCount, labelCount, pageCount } = await generateMap({ ...params, translator });
     showPdf(pdf, 'tastmap.pdf');
     const braille = translator ? 'liblouis German' : 'placeholder braille';
     setStatus(`Done — ${strokeCount} strokes, ${labelCount} labels (${braille}), ${pageCount} pages.`);
@@ -182,7 +180,7 @@ form.addEventListener('submit', (e) => {
 
 calibrateBtn.addEventListener('click', () => {
   void withBusy('Rendering calibration sheet…', async () => {
-    const pdf = await renderCalibration({ paper: paperSelect.value as PaperSize, marginMm: readMargin() }, { ghostText: ghostCheckbox.checked });
+    const pdf = await renderCalibration({ paper: paperSelect.value as PaperSize, marginMm: readMargin() });
     showPdf(pdf, 'tastmap-calibration.pdf');
     setStatus('Done — calibration sheet. Print on Schwellpapier, fuse, then feel each row.');
   });
@@ -190,17 +188,9 @@ calibrateBtn.addEventListener('click', () => {
 
 testSheetsBtn.addEventListener('click', () => {
   void withBusy('Rendering test-sheet gallery…', async () => {
-    const pdf = await renderTestSheets({ ghostText: ghostCheckbox.checked });
+    const pdf = await renderTestSheets();
     showPdf(pdf, 'tastmap-test-sheets.pdf');
     setStatus('Done — 3-page test gallery. Print all, fuse, and feel what works.');
-  });
-});
-
-demoMapBtn.addEventListener('click', () => {
-  void withBusy('Rendering demo map…', async () => {
-    const pdf = await renderDemoMap(paperSelect.value as PaperSize, { ghostText: ghostCheckbox.checked });
-    showPdf(pdf, 'tastmap-demo-map.pdf');
-    setStatus('Done — synthetic demo map (whole vocabulary, no braille). Ink key at the bottom.');
   });
 });
 

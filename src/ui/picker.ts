@@ -50,6 +50,7 @@ export function createPicker(el: HTMLElement, initial: LngLat): Picker {
     },
     setCenter(c) {
       marker.setLatLng([c.lat, c.lng]);
+      map.setView([c.lat, c.lng]); // pan the view too (e.g. after an address search)
     },
     setFootprint(bbox) {
       const bounds: L.LatLngBoundsExpression = [

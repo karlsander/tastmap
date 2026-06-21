@@ -8,7 +8,6 @@ export { icon, ICON_KINDS } from './scene/icons';
 export type { IconKind } from './scene/icons';
 export { clipTextureToPolygon, clearTextureAroundLine, pointInPolygon, distPointToPolyline } from './scene/fill';
 export { renderPdf, renderPdfPages } from './pdf/render';
-export type { RenderOptions } from './pdf/render';
 export { buildCalibrationScene } from './calibration';
 export type { CalibrationParams } from './calibration';
 export { basicTranslator } from './braille/translate';
@@ -20,8 +19,7 @@ export { collectLabelCandidates, placeLabels, buildLegendScenes, keyFor } from '
 export { buildFurniture, scaleBarDistance } from './furniture';
 export { simplify } from './geo/simplify';
 export { buildTestSheets } from './testsheets';
-export { buildDemoMap } from './demoMap';
-export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets, renderDemoMap } from './pipeline';
+export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets } from './pipeline';
 export type { MapParams, MapResult, CoverageParams } from './pipeline';
 export { styles, streetOverview } from './style/defaultStyle';
 export { TACTILE_LINES, TACTILE_AREAS, MIN_LINE_WIDTH_MM } from './style/vocabulary';

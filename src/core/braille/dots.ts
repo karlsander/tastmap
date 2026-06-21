@@ -16,10 +16,14 @@ export function dotOffset(dot: number, pitch = MARBURG_MEDIUM.dotPitchMm): Point
   return { x: col * pitch, y: row * pitch };
 }
 
-/** Lay out a run of cells, `origin` being the top-left dot of the first cell. */
-export function layoutCells(cells: BrailleCell[], origin: PointMm): DotPrimitive[] {
+/**
+ * Lay out a run of cells, `origin` being the top-left dot of the first cell.
+ * Spacing is always Marburg standard; `dotDiameterMm` overrides only the dot
+ * size (smaller dots may swell into pointier, more distinct bumps).
+ */
+export function layoutCells(cells: BrailleCell[], origin: PointMm, dotDiameterMm: number = MARBURG_MEDIUM.dotDiameterMm): DotPrimitive[] {
   const dots: DotPrimitive[] = [];
-  const radius = MARBURG_MEDIUM.dotDiameterMm / 2;
+  const radius = dotDiameterMm / 2;
   cells.forEach((cell, i) => {
     const cellX = origin.x + i * MARBURG_MEDIUM.cellPitchMm;
     for (const d of cell) {

@@ -1,5 +1,4 @@
 import { buildCalibrationScene, type CalibrationParams } from './calibration';
-import { buildDemoMap } from './demoMap';
 import { basicTranslator, type BrailleCell, type Translator } from './braille/translate';
 import { printableRect } from './geo/clip';
 import { DEFAULT_MARGIN_MM, getPageDimensions, getPrintableArea, uniformMargins } from './geo/paper';
@@ -9,7 +8,7 @@ import { buildFurniture } from './furniture';
 import { buildLegendScenes, collectLabelCandidates, placeLabels } from './label';
 import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
-import { renderPdf, renderPdfPages, type RenderOptions } from './pdf/render';
+import { renderPdf, renderPdfPages } from './pdf/render';
 import { buildScene } from './scene/build';
 import type { Scene } from './scene/types';
 import { classify } from './style/classify';
@@ -30,8 +29,6 @@ export interface MapParams {
   translator?: Translator;
   /** Cap on placed labels to keep the map legible. */
   maxLabels?: number;
-  /** Render ink labels as ghost placeholders (for the fuse-ready, text-free print). */
-  ghostText?: boolean;
   /** Title shown in the furniture band (ink + braille). Defaults to "1:N". */
   title?: string;
   /** Douglas–Peucker simplification tolerance (page mm); defaults applied in buildScene. */
@@ -128,21 +125,16 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
     ),
   );
 
-  const pdf = await renderPdfPages([scene, ...legendPages], { ghostText: params.ghostText });
+  const pdf = await renderPdfPages([scene, ...legendPages]);
   return { pdf, featureCount: classified.length, strokeCount, labelCount, pageCount: 1 + legendPages.length };
 }
 
 /** Render the calibration sheet to PDF bytes — no network, purely local. */
-export async function renderCalibration(params: CalibrationParams, opts: RenderOptions = {}): Promise<Uint8Array> {
-  return renderPdf(buildCalibrationScene(params), opts);
+export async function renderCalibration(params: CalibrationParams): Promise<Uint8Array> {
+  return renderPdf(buildCalibrationScene(params));
 }
 
 /** Render the full multi-page tactile test-sheet gallery — no network. */
-export async function renderTestSheets(opts: RenderOptions = {}): Promise<Uint8Array> {
-  return renderPdfPages(buildTestSheets(), opts);
-}
-
-/** Render the synthetic one-page demo map (whole vocabulary, no braille). */
-export async function renderDemoMap(paper: PaperSize = 'A4', opts: RenderOptions = {}): Promise<Uint8Array> {
-  return renderPdf(buildDemoMap(paper), opts);
+export async function renderTestSheets(): Promise<Uint8Array> {
+  return renderPdfPages(buildTestSheets());
 }

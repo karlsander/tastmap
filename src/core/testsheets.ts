@@ -447,7 +447,7 @@ function texturedPolygon(poly: PointMm[], fill: (r: RectMm) => Primitive[]): Pri
 function texturesPage(): Scene {
   const p = newPage();
   const A = p.area;
-  p.text('3 TEXTURES   fills · landmass · lines through · solids + icons · rail', A.minX, A.minY + 3, 3);
+  p.text('3 TEXTURES   fills · landmass · lines through · solids + icons · rail · braille', A.minX, A.minY + 3, 3);
   let y = A.minY + 9;
 
   // 1. Kept pattern fills (reference swatches).
@@ -562,6 +562,16 @@ function texturesPage(): Scene {
   rail('ties only 0.8, 3mm @3', (m) => {
     p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 3, tieSpacingMm: 3, widthMm: 0.8 }));
   });
+
+  // Braille dot size — Marburg spacing kept; smaller dots may swell pointier.
+  y += 5;
+  p.text('braille dot size (Marburg 2.5 / 6 spacing kept)', A.minX, y, SEC);
+  y += 4;
+  for (const [dia, lbl] of [[1.5, '1.5 std'], [1.3, '1.3'], [1.1, '1.1']] as [number, string][]) {
+    p.add(...layoutCells(basicTranslator.translate('marburg 123'), at(A.minX, y), dia));
+    p.text(lbl, A.minX + 82, y + 2.5, TINY);
+    y += 9;
+  }
   return p.scene();
 }
 
