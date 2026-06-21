@@ -3,7 +3,8 @@ import { basicTranslator, type BrailleCell, type Translator } from './braille/tr
 import { printableRect } from './geo/clip';
 import { DEFAULT_MARGIN_MM, getPageDimensions, getPrintableArea, uniformMargins } from './geo/paper';
 import { bboxFromCenter, groundMeters, makeProjector } from './geo/projection';
-import type { BBox, LngLat, Orientation, PaperSize } from './geo/types';
+import type { BBox, LngLat, Orientation, PaperSize, RectMm } from './geo/types';
+import { buildFurniture } from './furniture';
 import { buildLegendScenes, collectLabelCandidates, placeLabels } from './label';
 import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
@@ -30,6 +31,10 @@ export interface MapParams {
   maxLabels?: number;
   /** Render ink labels as ghost placeholders (for the fuse-ready, text-free print). */
   ghostText?: boolean;
+  /** Title shown in the furniture band (ink + braille). Defaults to "1:N". */
+  title?: string;
+  /** Douglas–Peucker simplification tolerance (page mm); defaults applied in buildScene. */
+  simplifyToleranceMm?: number;
   overpassEndpoint?: string;
   signal?: AbortSignal;
 }
@@ -50,6 +55,9 @@ export interface MapResult {
 
 /** Fetch slightly beyond the page so edge features aren't cut off mid-render. */
 const COVERAGE_PADDING = 1.15;
+
+/** Height of the bottom band reserved for map furniture (title/scale/north), mm. */
+const FURNITURE_BAND_MM = 20;
 
 export interface CoverageParams {
   center: LngLat;
@@ -93,20 +101,31 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   const features = normalize(res);
   const projector = makeProjector(params.center, params.scaleDenominator, dim);
   const classified = classify(features, params.style);
-  const clip = printableRect(dim, margins);
-  const scene = buildScene(classified, projector, clip);
+  const translate = (s: string): BrailleCell[] => (params.translator ?? basicTranslator).translate(s);
+
+  // Reserve a band at the bottom of the printable area for map furniture; the
+  // map (and its labels) clip to the area above it.
+  const printable = printableRect(dim, margins);
+  const clip: RectMm = { ...printable, maxY: printable.maxY - FURNITURE_BAND_MM };
+  const scene = buildScene(classified, projector, clip, { simplifyToleranceMm: params.simplifyToleranceMm });
   const strokeCount = scene.primitives.length;
 
   let labelCount = 0;
   let legendPages: Scene[] = [];
   if (params.labels !== false) {
-    const translate = (s: string): BrailleCell[] => (params.translator ?? basicTranslator).translate(s);
     const candidates = collectLabelCandidates(classified, projector, clip);
     const { placed } = placeLabels(candidates, clip, translate, params.maxLabels);
     for (const pl of placed) scene.primitives.push(...pl.dots);
     legendPages = buildLegendScenes(placed, params.paper, params.marginMm ?? DEFAULT_MARGIN_MM, translate);
     labelCount = placed.length;
   }
+
+  scene.primitives.push(
+    ...buildFurniture(
+      { minX: printable.minX, minY: printable.maxY - FURNITURE_BAND_MM, maxX: printable.maxX, maxY: printable.maxY },
+      { scaleDenominator: params.scaleDenominator, title: params.title ?? '', translate },
+    ),
+  );
 
   const pdf = await renderPdfPages([scene, ...legendPages], { ghostText: params.ghostText });
   return { pdf, featureCount: classified.length, strokeCount, labelCount, pageCount: 1 + legendPages.length };

@@ -58,6 +58,10 @@ legend {
   gap: 0.25rem;
 }
 
+.field.grow {
+  flex: 1;
+}
+
 .field input,
 .field select {
   padding: 0.4rem;

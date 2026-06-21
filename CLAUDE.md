@@ -34,10 +34,13 @@ npm run dev | test | typecheck | build
 
 ## Known TODOs (load-bearing)
 
-Generalization (simplify + min separation), area textures (helpers exist in
-`core/scene/textures` — wire into `buildScene` via `AreaSymbology`), scale bar /
-north / title. Label placement (`core/label`) is proximity-only — leader lines /
-better anchoring may be needed once felt on paper.
+Area textures (helpers exist in `core/scene/textures` — wire into `buildScene`
+via `AreaSymbology`); minimum-feature-*separation* displacement (simplify +
+min-length already done in `buildScene` via `core/geo/simplify`); render the
+`double`/`dotted` line vocabulary (extend `LineSymbology`). Label placement
+(`core/label`) is proximity-only — leader lines / better anchoring may be needed
+once felt on paper. Map furniture (scale bar / north / title, ink+braille) lives
+in `core/furniture`, drawn in a reserved bottom band of the map page.
 
 **Braille**: liblouis (German Vollschrift) runs in the browser via `ui/liblouis`
 — the emscripten build + easy-api are loaded as classic scripts (`?url`), the

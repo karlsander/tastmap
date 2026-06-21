@@ -28,6 +28,7 @@ const latInput = el<HTMLInputElement>('lat');
 const lngInput = el<HTMLInputElement>('lng');
 const scaleInput = el<HTMLInputElement>('scale');
 const marginInput = el<HTMLInputElement>('margin');
+const titleInput = el<HTMLInputElement>('title');
 const paperSelect = el<HTMLSelectElement>('paper');
 const styleSelect = el<HTMLSelectElement>('style');
 const statusEl = el<HTMLParagraphElement>('status');
@@ -70,6 +71,7 @@ function readParams(): MapParams {
     orientation: orientation(),
     style: styles[styleSelect.value] ?? streetOverview,
     marginMm: readMargin(),
+    title: titleInput.value,
   };
 }
 

@@ -16,6 +16,8 @@ export { decodeBrailleUnicode } from './braille/decode';
 export { makeLiblouisTranslator } from './braille/liblouis';
 export type { LiblouisGrade, LiblouisOptions, TranslateString } from './braille/liblouis';
 export { collectLabelCandidates, placeLabels, buildLegendScenes, keyFor } from './label';
+export { buildFurniture, scaleBarDistance } from './furniture';
+export { simplify } from './geo/simplify';
 export { buildTestSheets } from './testsheets';
 export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets } from './pipeline';
 export type { MapParams, MapResult, CoverageParams } from './pipeline';
