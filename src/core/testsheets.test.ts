@@ -5,7 +5,7 @@ describe('buildTestSheets', () => {
   const sheets = buildTestSheets();
 
   it('produces a multi-page A4 portrait gallery', () => {
-    expect(sheets.length).toBe(2);
+    expect(sheets.length).toBe(3);
     for (const s of sheets) {
       expect(s.widthMm).toBe(210);
       expect(s.heightMm).toBe(297);

@@ -23,6 +23,21 @@ as `TACTILE_LINES`.
 
 (Three solid widths + double + dotted + dashed.)
 
+A **rail line** is being trialled as a 6th type (centre line + cross-ties, and a
+ties-only variant) — see page 1 of the test sheets; not yet finalised.
+
+## Area fill patterns (validated)
+
+Encoded as `TACTILE_AREAS` in `core/style/vocabulary.ts`. Distinct under the
+finger and usable even in small areas:
+
+- **cross-hatch x2** (2 mm) and **dot grid 2.5** — two clear, all-purpose fills.
+- **directional hatches at 2.5 mm** — horizontal / `/` / vertical / `\` — read as
+  *directions* (the finger follows the grooves); good for conveying orientation.
+- **Avoid solid fills**: they print but feel unpleasant (raise too much / too
+  soft). For a "solid"-looking area use a **dense cross-hatch (x1 or x0.5)**
+  instead (being trialled on test-sheet page 3).
+
 ## Key findings — print run 1 (2026-06-21)
 
 - **Results were very good** — all tested line widths (0.2–2.0 mm) print and
@@ -31,6 +46,7 @@ as `TACTILE_LINES`.
   finger → `MIN_LINE_WIDTH_MM = 0.3`. Don't emit lines thinner than this.
 - Two close parallel lines are a strong, distinct way to render a single road
   ("double line road").
+- Patterns: see "Area fill patterns" above.
 
 ## How to apply
 
@@ -46,11 +62,12 @@ as `TACTILE_LINES`.
 
 ## Calibration workflow
 
-1. Generate the **Test sheets** (2 pages) and **Calibration sheet**; tick **Ghost
-   text** to print the fuse-ready, label-free version (heated text turns to mush);
-   keep the normal PDF as the key.
+1. Generate the **Test sheets** (3 pages: lines / map / textures) and
+   **Calibration sheet**; tick **Ghost text** to print the fuse-ready, label-free
+   version (heated text turns to mush); keep the normal PDF as the key.
 2. Fuse, feel, and record what reads → update `vocabulary.ts` and this file.
-3. Open questions still to settle on paper: best **area textures** (water / park /
-   building), **icon strength** (church/person/station/home/shop/restaurant/tree
-   are on test-sheet p2 at 0.4/0.8/1.4 mm), **min feature separation** for
-   generalization, and braille dot legibility at Marburg spec.
+3. Open questions still on the test sheets to settle: the **rail** line type;
+   textured **landmass edges** (outline vs raw) and **lines through textures**
+   (with vs without a 1 mm clearing); **cross-hatch "solid"** density (x1 vs
+   x0.5); **icon strength** (p2, 0.4/0.8/1.4 mm); min feature **separation** for
+   generalization; braille dot legibility.

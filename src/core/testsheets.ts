@@ -3,32 +3,31 @@ import { basicTranslator } from './braille/translate';
 import { printableRect } from './geo/clip';
 import { getPageDimensions, uniformMargins } from './geo/paper';
 import type { PointMm, RectMm } from './geo/types';
-import { createPage, type Page } from './scene/layout';
+import { clearTextureAroundLine, clipTextureToPolygon } from './scene/fill';
 import { ICON_KINDS, icon } from './scene/icons';
-import { arcPoints, beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './scene/lines';
-import { crossHatchFill, dotFill, filledPolygon, filledRect, hatchFill, rectOutline } from './scene/textures';
+import { arcPoints, beadedPath, ladderPath, parallelPair, segment, wavyPath } from './scene/lines';
+import { createPage, type Page } from './scene/layout';
+import { crossHatchFill, dotFill, filledPolygon, hatchFill, rectOutline } from './scene/textures';
 import type { PathPrimitive, Primitive, Scene } from './scene/types';
 
 /**
- * A compact, printable tactile test gallery on just two A4 pages — swell paper
- * is expensive, so every candidate is packed tight with the bare minimum of ink
- * text (only terse codes to orient by touch; the labels swell too, so less ink =
- * more usable surface).
+ * Printable tactile test gallery, three A4 pages, packed with minimal ink text.
  *
- *   Page 1 — LINES & PATTERNS: line widths, separation, braille, dashes, and the
- *            full area-texture / water / park / contrast catalogue.
- *   Page 2 — MAP: linear feature styles, street hierarchy, an annotated junction,
- *            and crossing / sidewalk / tram-boarding option rows.
+ *   Page 1 — LINES: widths, separation, braille, dashes, dot rows, rail line
+ *            candidate, thick curves.
+ *   Page 2 — MAP: linear styles, hierarchy, annotated junction, crossing /
+ *            sidewalk / tram options, point icons.
+ *   Page 3 — TEXTURES: kept pattern fills, textured "landmass" shapes (outline
+ *            vs raw edge), lines through a texture (with / without clearing),
+ *            and cross-hatch "solid" shapes.
  *
- * Print, fuse, feel; then feed the winners into core/style/defaultStyle.ts and
- * the symbology built from core/scene/{lines,textures}.
- *
+ * Print, fuse, feel; feed winners into core/style/vocabulary.ts + defaultStyle.
  * Pure: no network. Always A4 portrait at exact size.
  */
 
 const MARGIN_MM = 8;
-const TINY = 2.3; // sample label
-const SEC = 3.3; // section header
+const TINY = 2.3;
+const SEC = 3.3;
 const at = (x: number, y: number): PointMm => ({ x, y });
 
 function newPage(): Page {
@@ -41,7 +40,6 @@ interface Swatch {
   fill: (r: RectMm) => Primitive[];
 }
 
-/** Lay swatches left-to-right, wrapping, with a terse label under each. */
 function swatchGrid(p: Page, items: Swatch[], x0: number, y0: number, xMax: number, sw: number, sh: number): number {
   const gapX = 5;
   const gapY = 3;
@@ -62,56 +60,81 @@ function swatchGrid(p: Page, items: Swatch[], x0: number, y0: number, xMax: numb
   return y + sh + labelH + gapY;
 }
 
-function half(rect: RectMm, side: 'L' | 'R', fn: (r: RectMm) => Primitive[]): Primitive[] {
-  const midX = (rect.minX + rect.maxX) / 2;
-  return fn(side === 'L' ? { ...rect, maxX: midX } : { ...rect, minX: midX });
-}
-
-const TEXTURES: Swatch[] = [
-  { label: 'h45/1.5', fill: (r) => hatchFill(r, { spacingMm: 1.5, angleDeg: 45, widthMm: 0.4 }) },
-  { label: 'h45/2', fill: (r) => hatchFill(r, { spacingMm: 2, angleDeg: 45, widthMm: 0.4 }) },
-  { label: 'h45/2.5', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 }) },
-  { label: 'h45/3', fill: (r) => hatchFill(r, { spacingMm: 3, angleDeg: 45, widthMm: 0.4 }) },
-  { label: 'h0/2.5', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 0, widthMm: 0.4 }) },
-  { label: 'h90/2.5', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 90, widthMm: 0.4 }) },
+// The six pattern fills kept after print run 1 (others felt indistinct / too soft).
+const PATTERNS: Swatch[] = [
   { label: 'x2', fill: (r) => crossHatchFill(r, { spacingMm: 2, angleDeg: 45, widthMm: 0.4 }) },
-  { label: 'x3', fill: (r) => crossHatchFill(r, { spacingMm: 3, angleDeg: 45, widthMm: 0.4 }) },
-  { label: 'd2.5/.5', fill: (r) => dotFill(r, { spacingMm: 2.5, radiusMm: 0.5 }) },
-  { label: 'd3/.6', fill: (r) => dotFill(r, { spacingMm: 3, radiusMm: 0.6 }) },
-  { label: 'd4/.8', fill: (r) => dotFill(r, { spacingMm: 4, radiusMm: 0.8 }) },
-  { label: 'd3/.4', fill: (r) => dotFill(r, { spacingMm: 3, radiusMm: 0.4 }) },
-  { label: '~water', fill: (r) => wavyFill(r, { amplitudeMm: 0.8, wavelengthMm: 6, rowGapMm: 3, widthMm: 0.4 }) },
-  { label: '~wide', fill: (r) => wavyFill(r, { amplitudeMm: 0.6, wavelengthMm: 9, rowGapMm: 4, widthMm: 0.45 }) },
-  { label: 'park.', fill: (r) => scatterFill(r, { spacingMm: 4, radiusMm: 0.6, jitterMm: 1 }) },
-  { label: 'park#', fill: (r) => hatchFill(r, { spacingMm: 3.5, angleDeg: 60, widthMm: 0.4 }) },
-  {
-    label: 'h|d',
-    fill: (r) => [
-      ...half(r, 'L', (rr) => hatchFill(rr, { spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 })),
-      ...half(r, 'R', (rr) => dotFill(rr, { spacingMm: 3, radiusMm: 0.6 })),
-    ],
-  },
-  {
-    label: 'fine|coarse',
-    fill: (r) => [
-      ...half(r, 'L', (rr) => hatchFill(rr, { spacingMm: 1.5, angleDeg: 45, widthMm: 0.4 })),
-      ...half(r, 'R', (rr) => hatchFill(rr, { spacingMm: 3.5, angleDeg: 45, widthMm: 0.4 })),
-    ],
-  },
+  { label: 'dots2.5', fill: (r) => dotFill(r, { spacingMm: 2.5, radiusMm: 0.5 }) },
+  { label: 'h0/2.5', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 0, widthMm: 0.4 }) },
+  { label: 'h45/2.5', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 }) },
+  { label: 'h90/2.5', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 90, widthMm: 0.4 }) },
+  { label: 'h135/2.5', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 135, widthMm: 0.4 }) },
 ];
 
+// The validated line vocabulary, drawn through an arbitrary polyline (corner/curve ok).
+const LINE_TYPES = ['thin', 'normal', 'thick', 'dashed', 'dotted', 'double'] as const;
+function drawLineType(kind: (typeof LINE_TYPES)[number], pts: PointMm[]): Primitive[] {
+  switch (kind) {
+    case 'thin':
+      return [{ kind: 'path', closed: false, points: pts, stroke: { widthMm: 0.3 } }];
+    case 'normal':
+      return [{ kind: 'path', closed: false, points: pts, stroke: { widthMm: 0.8 } }];
+    case 'thick':
+      return [{ kind: 'path', closed: false, points: pts, stroke: { widthMm: 2.0 } }];
+    case 'dashed':
+      return [{ kind: 'path', closed: false, points: pts, stroke: { widthMm: 0.6, dashMm: [3, 1.5] } }];
+    case 'dotted':
+      return beadedPath(pts, { spacingMm: 3, radiusMm: 0.6 });
+    case 'double': {
+      const out: Primitive[] = [];
+      for (let i = 1; i < pts.length; i++) out.push(...parallelPair(pts[i - 1], pts[i], { gapMm: 1.5, widthMm: 0.5 }));
+      return out;
+    }
+  }
+}
+
+function bbox(poly: PointMm[]): RectMm {
+  const xs = poly.map((p) => p.x);
+  const ys = poly.map((p) => p.y);
+  return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+}
+
+/** A deterministic irregular blob polygon — a stand-in landmass. */
+function blob(cx: number, cy: number, r: number): PointMm[] {
+  const ms = [1, 0.82, 1.08, 0.86, 1.12, 0.84, 1.06, 0.92];
+  return ms.map((m, i) => {
+    const a = (i / ms.length) * 2 * Math.PI;
+    return at(cx + r * m * Math.cos(a), cy + r * m * Math.sin(a));
+  });
+}
+
+function circlePoly(cx: number, cy: number, r: number): PointMm[] {
+  return arcPoints(cx, cy, r, 0, 360, 24);
+}
+
 // ---------------------------------------------------------------------------
-// Page 1 — LINES & PATTERNS
+// Page 1 — LINES
 // ---------------------------------------------------------------------------
-function linesAndPatternsPage(): Scene {
+function curvedCornerSample(box: RectMm, widthMm: number): PathPrimitive {
+  const bx = box.minX;
+  const by = box.minY;
+  const bottomY = by + 25;
+  const r = 7;
+  const a = at(bx + 3, bottomY);
+  const arc = arcPoints(bx + 11, bottomY - r, r, 90, 0, 8);
+  const c = arc[arc.length - 1];
+  const d = at(c.x, by + 9);
+  const e = at(bx + 27, by + 9);
+  return { kind: 'path', closed: false, points: [a, ...arc, d, e], stroke: { widthMm } };
+}
+
+function linesPage(): Scene {
   const p = newPage();
   const A = p.area;
-  p.text('1 LINES & PATTERNS   width · step · braille · dash · separation · dots · textures', A.minX, A.minY + 3, 3);
+  p.text('1 LINES   width · step · braille · dash · separation · dots · rail · curves', A.minX, A.minY + 3, 3);
   const colL = A.minX;
   const colR = A.minX + 100;
-  const len = 80; // ink is cheap — use most of the half-page width
+  const len = 80;
 
-  // Left column.
   let yl = A.minY + 8;
   p.text('width (mm)', colL, yl, SEC);
   yl += 3.5;
@@ -138,7 +161,6 @@ function linesAndPatternsPage(): Scene {
   p.add(...layoutCells(basicTranslator.translate('marburg 12'), at(colL, yl)));
   yl += 9;
 
-  // Right column.
   let yr = A.minY + 8;
   p.text('dash (0.6)', colR, yr, SEC);
   yr += 3.5;
@@ -183,35 +205,45 @@ function linesAndPatternsPage(): Scene {
     yr += h;
   }
 
-  // Patterns fill the lower half (previously blank).
-  let y = Math.max(yl, yr) + 5;
-  p.text('patterns   texture · water · park · contrast', A.minX, y, SEC);
+  // Rail line candidate (6th type): centre line with cross-ties, + ties-only.
+  let y = Math.max(yl, yr) + 4;
+  p.text('rail line (candidate 6th type)', A.minX, y, SEC);
   y += 4;
-  y = swatchGrid(p, TEXTURES, A.minX, y, A.maxX, 34, 15);
+  const railLen = 80;
+  const rail = (l: string, draw: (m: number) => void): void => {
+    const h = 8;
+    const my = y + h / 2;
+    draw(my);
+    p.text(l, A.minX + railLen + 4, my + 0.8, TINY);
+    y += h;
+  };
+  rail('centre 0.8 + ties 0.4 @2', (m) => {
+    p.add(segment(at(A.minX, m), at(A.minX + railLen, m), 0.8));
+    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 3, tieSpacingMm: 2, widthMm: 0.4 }));
+  });
+  rail('centre 0.8 + ties 1.0 @5', (m) => {
+    p.add(segment(at(A.minX, m), at(A.minX + railLen, m), 0.8));
+    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 4, tieSpacingMm: 5, widthMm: 1.0 }));
+  });
+  rail('ties only 0.8, 3mm @3', (m) => {
+    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 3, tieSpacingMm: 3, widthMm: 0.8 }));
+  });
 
-  // Solid black shapes — do large filled areas swell flat / bleed / warp?
-  y += 3;
-  p.text('solids   do large black areas swell flat / bleed / warp?', A.minX, y, SEC);
+  // Thick curves.
+  y += 5;
+  p.text('thick curves (mm) · curve + corner', A.minX, y, SEC);
   y += 4;
-  const baseline = y + 25 + 2.6;
-  let sx = A.minX;
-  for (const s of [8, 12, 16, 20, 25]) {
-    p.add(filledRect({ minX: sx, minY: y, maxX: sx + s, maxY: y + s }));
-    p.text(String(s), sx, baseline, TINY);
-    sx += s + 6;
+  let cx = A.minX;
+  for (const w of [2, 3, 4, 5]) {
+    p.add(curvedCornerSample({ minX: cx, minY: y, maxX: cx + 28, maxY: y + 30 }, w));
+    p.text(String(w), cx, y + 30 + 2.6, TINY);
+    cx += 40;
   }
-  const cr = 12.5;
-  p.add({ kind: 'dot', center: at(sx + cr, y + cr), radiusMm: cr });
-  p.text(`circ ${2 * cr}`, sx, baseline, TINY);
-  sx += 2 * cr + 6;
-  const tw = 26;
-  p.add(filledPolygon([at(sx, y + 25), at(sx + tw, y + 25), at(sx + tw / 2, y)]));
-  p.text('tri', sx, baseline, TINY);
   return p.scene();
 }
 
 // ---------------------------------------------------------------------------
-// Page 2 — MAP: linear styles, hierarchy, junction, detail options
+// Page 2 — MAP
 // ---------------------------------------------------------------------------
 function drawNet(p: Page, ox: number, oy: number, w: number, h: number, casing: boolean): void {
   const major = (a: PointMm, b: PointMm): void => {
@@ -258,7 +290,7 @@ function drawJunction(p: Page, ox: number, oy: number): void {
   const ay = (plat.minY + plat.maxY) / 2;
   p.add(segment(at(plat.minX - 4, ay - 2), at(plat.minX, ay), 0.5), segment(at(plat.minX - 4, ay + 2), at(plat.minX, ay), 0.5));
 
-  const key = (n: number, x: number, y: number): void => p.text(String(n), x, y, 2.4);
+  const key = (n: number, x: number, ky: number): void => p.text(String(n), x, ky, 2.4);
   key(1, ox + 14, cy - 4.5);
   key(2, cx - 8, cy - 5);
   key(3, cx + 23, cy - 4.5);
@@ -268,21 +300,6 @@ function drawJunction(p: Page, ox: number, oy: number): void {
   key(7, plat.maxX + 1.5, cy + 9);
   key(8, plat.minX - 6, ay - 2.5);
   p.text('1 casing 2 junction 3 crossing 4 walk 5 curb 6 tram 7 stop 8 board', ox, botEnd + 5, 2.1);
-}
-
-/** A thick stroked sample with a smooth curve and a sharp corner, sized to a
- *  cell — to test how wide lines behave around bends and angles. */
-function curvedCornerSample(box: RectMm, widthMm: number): PathPrimitive {
-  const bx = box.minX;
-  const by = box.minY;
-  const bottomY = by + 25;
-  const r = 7;
-  const a = at(bx + 3, bottomY); // bottom-left start
-  const arc = arcPoints(bx + 11, bottomY - r, r, 90, 0, 8); // horizontal → vertical
-  const c = arc[arc.length - 1];
-  const d = at(c.x, by + 9); // up the vertical
-  const e = at(bx + 27, by + 9); // sharp corner → horizontal
-  return { kind: 'path', closed: false, points: [a, ...arc, d, e], stroke: { widthMm } };
 }
 
 interface Variation {
@@ -306,26 +323,21 @@ function detailRow(p: Page, A: RectMm, y: number, label: string, cellH: number, 
 function mapPage(): Scene {
   const p = newPage();
   const A = p.area;
-  p.text('2 MAP   linear styles · hierarchy · junction · crossing / sidewalk / tram', A.minX, A.minY + 3, 3);
+  p.text('2 MAP   linear styles · hierarchy · junction · crossing / sidewalk / tram · icons', A.minX, A.minY + 3, 3);
 
-  // Top band: junction on the left, linear styles in the freed space on the right.
   drawJunction(p, A.minX, A.minY + 8);
   const lx = A.minX + 116;
   const ll = 36;
   p.text('linear', lx, A.minY + 8, SEC);
   let ly = A.minY + 12;
   const linRows: { l: string; draw: (x: number, m: number) => void }[] = [
-    { l: 'major 1.0', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 1.0)) },
-    { l: 'minor 0.6', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 0.6)) },
-    { l: 'path d.4', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 0.4, [1.5, 1.5])) },
-    { l: 'casing', draw: (x, m) => p.add(...parallelPair(at(x, m), at(x + ll, m), { gapMm: 2, widthMm: 0.4 })) },
-    { l: 'border .-', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 0.6, [3, 1.5, 0.6, 1.5])) },
-    { l: 'border bead', draw: (x, m) => p.add(...beadedPath([at(x, m), at(x + ll, m)], { spacingMm: 3, radiusMm: 0.7 })) },
-    { l: 'water 1.2', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 1.2)) },
+    { l: 'major 2.0', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 2.0)) },
+    { l: 'minor 0.8', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 0.8)) },
+    { l: 'path dash', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 0.6, [3, 1.5])) },
+    { l: 'double road', draw: (x, m) => p.add(...parallelPair(at(x, m), at(x + ll, m), { gapMm: 1.5, widthMm: 0.5 })) },
+    { l: 'border dot', draw: (x, m) => p.add(...beadedPath([at(x, m), at(x + ll, m)], { spacingMm: 3, radiusMm: 0.6 })) },
     { l: 'water wavy', draw: (x, m) => p.add(wavyPath(at(x, m), at(x + ll, m), { amplitudeMm: 1, wavelengthMm: 7, widthMm: 0.6 })) },
-    { l: 'water banks', draw: (x, m) => p.add(...parallelPair(at(x, m), at(x + ll, m), { gapMm: 2.5, widthMm: 0.4 })) },
-    { l: 'rail ties', draw: (x, m) => p.add(...ladderPath(at(x, m), at(x + ll, m), { tieLengthMm: 3, tieSpacingMm: 3, widthMm: 0.4 })) },
-    { l: 'rail+ties', draw: (x, m) => p.add(...ladderPath(at(x, m), at(x + ll, m), { tieLengthMm: 4, tieSpacingMm: 5, widthMm: 0.35, rails: true, railGapMm: 3, railWidthMm: 0.4 })) },
+    { l: 'rail', draw: (x, m) => p.add(segment(at(x, m), at(x + ll, m), 0.8), ...ladderPath(at(x, m), at(x + ll, m), { tieLengthMm: 3, tieSpacingMm: 3, widthMm: 0.5 })) },
   ];
   for (const r of linRows) {
     const m = ly + 3;
@@ -334,7 +346,6 @@ function mapPage(): Scene {
     ly += 6.5;
   }
 
-  // Hierarchy below the top band.
   let y = A.minY + 100;
   p.text('hierarchy   single | casing', A.minX, y, SEC);
   y += 4;
@@ -342,7 +353,6 @@ function mapPage(): Scene {
   drawNet(p, A.minX + 92, y, 66, 34, true);
   y += 38;
 
-  // Detail options.
   const B = 3;
   const roadAcross = (c: RectMm, my: number): void => {
     p.add(segment(at(c.minX, my - B), at(c.maxX, my - B), 0.5), segment(at(c.minX, my + B), at(c.maxX, my + B), 0.5));
@@ -447,8 +457,6 @@ function mapPage(): Scene {
         }),
     },
   ];
-
-  // Band: tram boarding tests (compact, left) + point-icons in 3 strengths (right).
   const bandTop = y;
   p.text('tram boarding', A.minX, bandTop, SEC);
   const tcW = 22;
@@ -475,29 +483,101 @@ function mapPage(): Scene {
       p.add(...icon(kind, at(colCx, cyc), iconSize, sMm));
     });
   });
-  y = gTop + 4 + strengths.length * rowStep + 3;
+  return p.scene();
+}
 
-  // Bottom band: solids on the left, thick curved lines on the right.
-  const by = y + 3;
-  const sy = by + 4;
-  const labelY = sy + 30 + 2.6;
-  p.text('solids', A.minX, by, SEC);
-  p.add(filledRect({ minX: A.minX, minY: sy, maxX: A.minX + 30, maxY: sy + 24 }));
-  p.text('30×24', A.minX, labelY, TINY);
-  p.add({ kind: 'dot', center: at(A.minX + 44, sy + 11), radiusMm: 11 });
-  p.text('circ 22', A.minX + 34, labelY, TINY);
+// ---------------------------------------------------------------------------
+// Page 3 — TEXTURES
+// ---------------------------------------------------------------------------
+function texturedPolygon(poly: PointMm[], fill: (r: RectMm) => Primitive[]): Primitive[] {
+  return clipTextureToPolygon(fill(bbox(poly)), poly);
+}
 
-  p.text('thick curves (mm) · curve + corner', A.minX + 68, by, SEC);
-  let cxp = A.minX + 68;
-  for (const w of [2, 3, 4, 5]) {
-    p.add(curvedCornerSample({ minX: cxp, minY: sy, maxX: cxp + 28, maxY: sy + 30 }, w));
-    p.text(String(w), cxp, labelY, TINY);
-    cxp += 30;
+function texturesPage(): Scene {
+  const p = newPage();
+  const A = p.area;
+  p.text('3 TEXTURES   fills · landmass edges · lines through · cross-hatch solids', A.minX, A.minY + 3, 3);
+  let y = A.minY + 9;
+
+  // 1. Kept pattern fills (reference swatches).
+  p.text('pattern fills (kept)', A.minX, y, SEC);
+  y += 4;
+  y = swatchGrid(p, PATTERNS, A.minX, y, A.maxX, 26, 14);
+  y += 2;
+
+  // 2. Landmass shapes — outline vs raw edge.
+  p.text('landmass — outline | raw edge', A.minX, y, SEC);
+  y += 4;
+  {
+    const r = 12;
+    const cy = y + r;
+    let cx = A.minX + r;
+    for (const t of [PATTERNS[0], PATTERNS[1], PATTERNS[3]]) {
+      const outlined = blob(cx, cy, r);
+      p.add(...texturedPolygon(outlined, t.fill));
+      p.add({ kind: 'path', closed: true, points: outlined, stroke: { widthMm: 0.5 } });
+      p.text(`${t.label} +out`, cx - r, cy + r + 3, TINY);
+      cx += 2 * r + 6;
+      const raw = blob(cx, cy, r);
+      p.add(...texturedPolygon(raw, t.fill));
+      p.text(`${t.label} raw`, cx - r, cy + r + 3, TINY);
+      cx += 2 * r + 8;
+    }
+    y = cy + r + 6;
+  }
+
+  // 3 & 4. Lines through an h45 texture — without / with 1mm clearing.
+  const linesThrough = (clearMm: number, label: string): void => {
+    p.text(label, A.minX, y, SEC);
+    y += 3;
+    const cw = 29;
+    const ch = 22;
+    let cx = A.minX;
+    for (const lt of LINE_TYPES) {
+      const cell: RectMm = { minX: cx, minY: y, maxX: cx + cw, maxY: y + ch };
+      const linePts = [at(cx + cw * 0.5, y), at(cx + cw * 0.5, y + ch * 0.55), at(cx + cw * 0.85, y + ch)];
+      let tex: Primitive[] = hatchFill(cell, { spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 });
+      if (clearMm > 0) tex = clearTextureAroundLine(tex, linePts, clearMm);
+      p.add(...tex);
+      p.add(...drawLineType(lt, linePts));
+      p.text(lt, cx, y + ch + 2.6, TINY);
+      cx += cw + 1;
+    }
+    y += ch + 2.6 + 4;
+  };
+  linesThrough(0, 'lines through h45 — no clearing');
+  linesThrough(1, 'lines through h45 — 1 mm clearing');
+
+  // 5. "Solid" shapes via dense cross-hatch (vs one true solid).
+  p.text('"solid" via cross-hatch (x1 / x0.5) vs true solid', A.minX, y, SEC);
+  y += 4;
+  {
+    const r = 11;
+    const cy = y + r;
+    let cx = A.minX + r;
+    const tri = (c: number): PointMm[] => [at(c, cy - r), at(c + r * 0.9, cy + r * 0.6), at(c - r * 0.9, cy + r * 0.6)];
+    const xhatch = (sp: number) => (rr: RectMm): Primitive[] => crossHatchFill(rr, { spacingMm: sp, angleDeg: 45, widthMm: 0.4 });
+    const shapes: { label: string; build: () => Primitive[] }[] = [
+      { label: 'circ x1', build: () => withOutline(circlePoly(cx, cy, r), xhatch(1)) },
+      { label: 'circ x0.5', build: () => withOutline(circlePoly(cx, cy, r), xhatch(0.5)) },
+      { label: 'tri x1', build: () => withOutline(tri(cx), xhatch(1)) },
+      { label: 'tri x0.5', build: () => withOutline(tri(cx), xhatch(0.5)) },
+      { label: 'circ solid', build: () => [filledPolygon(circlePoly(cx, cy, r))] },
+    ];
+    for (const s of shapes) {
+      p.add(...s.build());
+      p.text(s.label, cx - r, cy + r + 3, TINY);
+      cx += 2 * r + 6;
+    }
   }
   return p.scene();
 }
 
-/** The condensed 2-page tactile test gallery, in print order. */
+function withOutline(poly: PointMm[], fill: (r: RectMm) => Primitive[]): Primitive[] {
+  return [...clipTextureToPolygon(fill(bbox(poly)), poly), { kind: 'path', closed: true, points: poly, stroke: { widthMm: 0.4 } }];
+}
+
+/** The 3-page tactile test gallery, in print order. */
 export function buildTestSheets(): Scene[] {
-  return [linesAndPatternsPage(), mapPage()];
+  return [linesPage(), mapPage(), texturesPage()];
 }

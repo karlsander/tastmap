@@ -6,6 +6,7 @@ export { crossHatchFill, dotFill, filledPolygon, filledRect, hatchFill, rectOutl
 export { arcPoints, beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './scene/lines';
 export { icon, ICON_KINDS } from './scene/icons';
 export type { IconKind } from './scene/icons';
+export { clipTextureToPolygon, clearTextureAroundLine, pointInPolygon, distPointToPolyline } from './scene/fill';
 export { renderPdf, renderPdfPages } from './pdf/render';
 export type { RenderOptions } from './pdf/render';
 export { buildCalibrationScene } from './calibration';
@@ -22,6 +23,6 @@ export { buildTestSheets } from './testsheets';
 export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets } from './pipeline';
 export type { MapParams, MapResult, CoverageParams } from './pipeline';
 export { styles, streetOverview } from './style/defaultStyle';
-export { TACTILE_LINES, MIN_LINE_WIDTH_MM } from './style/vocabulary';
-export type { TactileLine, TactileLineName, LinePattern } from './style/vocabulary';
+export { TACTILE_LINES, TACTILE_AREAS, MIN_LINE_WIDTH_MM } from './style/vocabulary';
+export type { TactileLine, TactileLineName, LinePattern, TactileArea, TactileAreaName, AreaFill } from './style/vocabulary';
 export type { StyleSpec } from './style/types';

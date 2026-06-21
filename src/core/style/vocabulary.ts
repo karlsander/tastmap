@@ -37,3 +37,30 @@ export const TACTILE_LINES = {
 } as const satisfies Record<string, TactileLine>;
 
 export type TactileLineName = keyof typeof TACTILE_LINES;
+
+/**
+ * Area fill patterns validated on print run 1 — distinct under the fingertip and
+ * usable even in small areas. The four directional hatches read as *directions*
+ * (the finger follows the grooves). Solids print but feel unpleasant (raise too
+ * much / too soft), so prefer a dense cross-hatch (x1 / x0.5) for "solid" areas.
+ */
+export type AreaFill =
+  | { kind: 'crosshatch'; spacingMm: number; angleDeg: number; widthMm: number }
+  | { kind: 'dots'; spacingMm: number; radiusMm: number }
+  | { kind: 'hatch'; spacingMm: number; angleDeg: number; widthMm: number };
+
+export interface TactileArea {
+  readonly label: string;
+  readonly fill: AreaFill;
+}
+
+export const TACTILE_AREAS = {
+  crosshatch: { label: 'cross-hatch', fill: { kind: 'crosshatch', spacingMm: 2, angleDeg: 45, widthMm: 0.4 } },
+  dots: { label: 'dot grid', fill: { kind: 'dots', spacingMm: 2.5, radiusMm: 0.5 } },
+  hatchH: { label: 'directional —', fill: { kind: 'hatch', spacingMm: 2.5, angleDeg: 0, widthMm: 0.4 } },
+  hatchF: { label: 'directional /', fill: { kind: 'hatch', spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 } },
+  hatchV: { label: 'directional |', fill: { kind: 'hatch', spacingMm: 2.5, angleDeg: 90, widthMm: 0.4 } },
+  hatchB: { label: 'directional \\', fill: { kind: 'hatch', spacingMm: 2.5, angleDeg: 135, widthMm: 0.4 } },
+} as const satisfies Record<string, TactileArea>;
+
+export type TactileAreaName = keyof typeof TACTILE_AREAS;
