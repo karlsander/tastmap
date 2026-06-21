@@ -112,7 +112,11 @@ button {
 
 #preview {
   width: 100%;
-  height: 40rem;
+  /* Size to A4/A3 portrait proportions (plus a little for the PDF viewer's
+     toolbar) so a portrait page fits without an internal scrollbar. Width
+     already fits; height follows the column width. */
+  aspect-ratio: 210 / 310;
+  min-height: 40rem;
   border: 1px solid #ccc;
 }
 
