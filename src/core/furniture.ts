@@ -67,6 +67,8 @@ function compassRose(cx: number, cy: number, R: number, rV: number): Primitive[]
 export function buildFurniture(area: RectMm, opts: FurnitureOptions): Primitive[] {
   const out: Primitive[] = [];
   const top = area.minY + 4;
+  // Shared top for every braille block, so title / scale / north read as one line.
+  const brailleY = top + 3;
 
   // North indicator (far right) — a compass rose with an "N" above and braille beside.
   const R = 6;
@@ -74,26 +76,27 @@ export function buildFurniture(area: RectMm, opts: FurnitureOptions): Primitive[
   const cy = area.minY + 11;
   out.push(...compassRose(cx, cy, R, 1.9));
   out.push(text('N', cx - 1, cy - R - 1.3, 3.2)); // centred above the north tip
-  out.push(...layoutCells(opts.translate('n'), at(cx + R + 1.5, cy - 2.5)));
+  out.push(...layoutCells(opts.translate('n'), at(cx + R + 1.5, brailleY)));
 
   // Scale bar — tucked just left of the compass so the title gets the rest of
   // the band. Right-aligned to the compass; end + mid ticks; "<dist> m" label.
+  // Raised so its braille lands on the shared braille line.
   const { distM, lengthMm } = scaleBarDistance(opts.scaleDenominator);
   const barX1 = cx - R - 6; // right end, a small gap from the compass
   const barX0 = barX1 - lengthMm; // left end
-  const barY = top + 5;
+  const barY = brailleY - 2.5;
   out.push(segment(at(barX0, barY), at(barX1, barY), 0.5));
   for (const x of [barX0, (barX0 + barX1) / 2, barX1]) {
     out.push(segment(at(x, barY - 1.6), at(x, barY + 1.6), 0.4));
   }
   const distLabel = `${distM} m`;
   out.push(text(distLabel, barX0, barY - 2.2, 3));
-  out.push(...layoutCells(opts.translate(distLabel), at(barX0, barY + 2.5)));
+  out.push(...layoutCells(opts.translate(distLabel), at(barX0, brailleY)));
 
   // Title block (left) — ink + braille — fills the remaining width.
   const title = opts.title.trim() || `1:${opts.scaleDenominator}`;
   out.push(text(title, area.minX, top, 3.5));
-  out.push(...layoutCells(opts.translate(title), at(area.minX, top + 2.5)));
+  out.push(...layoutCells(opts.translate(title), at(area.minX, brailleY)));
 
   return out;
 }
