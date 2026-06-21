@@ -93,19 +93,19 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   const classified = classify(features, params.style);
   const translate = (s: string): BrailleCell[] => (params.translator ?? basicTranslator).translate(s);
 
-  // Reserve a band at the bottom of the printable area for map furniture; the
-  // map clips to the area above it.
+  // Reserve a band at the top of the printable area for map furniture; the
+  // map clips to the area below it.
   const printable = printableRect(dim, margins);
-  const clip: RectMm = { ...printable, maxY: printable.maxY - FURNITURE_BAND_MM };
+  const clip: RectMm = { ...printable, minY: printable.minY + FURNITURE_BAND_MM };
   const scene = buildScene(classified, projector, clip, { simplifyToleranceMm: params.simplifyToleranceMm });
   const strokeCount = scene.primitives.length;
 
   // Keyed braille labels + a legend page are shelved pending a different
-  // approach; the braille rendering itself (furniture below, core/braille,
+  // approach; the braille rendering itself (furniture above, core/braille,
   // core/label) is kept. The furniture scale/north/title still use braille.
   scene.primitives.push(
     ...buildFurniture(
-      { minX: printable.minX, minY: printable.maxY - FURNITURE_BAND_MM, maxX: printable.maxX, maxY: printable.maxY },
+      { minX: printable.minX, minY: printable.minY, maxX: printable.maxX, maxY: printable.minY + FURNITURE_BAND_MM },
       { scaleDenominator: params.scaleDenominator, title: params.title ?? '', translate },
     ),
   );
