@@ -3,6 +3,7 @@ import {
   DEFAULT_MARGIN_MM,
   generateMap,
   renderCalibration,
+  renderDemoMap,
   renderTestSheets,
   renderedBBox,
   streetOverview,
@@ -37,6 +38,7 @@ const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
 const calibrateBtn = el<HTMLButtonElement>('calibrate');
 const testSheetsBtn = el<HTMLButtonElement>('testsheets');
+const demoMapBtn = el<HTMLButtonElement>('demomap');
 const ghostCheckbox = el<HTMLInputElement>('ghost');
 
 // Populate the style dropdown from the registry.
@@ -136,7 +138,7 @@ function showPdf(pdf: Uint8Array, downloadName: string): void {
 
 /** Run an async PDF producer while disabling the buttons and reporting status. */
 async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<void> {
-  const buttons = [generateBtn, calibrateBtn, testSheetsBtn];
+  const buttons = [generateBtn, calibrateBtn, testSheetsBtn, demoMapBtn];
   for (const b of buttons) b.disabled = true;
   setStatus(busyMessage);
   try {
@@ -190,7 +192,15 @@ testSheetsBtn.addEventListener('click', () => {
   void withBusy('Rendering test-sheet gallery…', async () => {
     const pdf = await renderTestSheets({ ghostText: ghostCheckbox.checked });
     showPdf(pdf, 'tastmap-test-sheets.pdf');
-    setStatus('Done — 2-page test gallery. Print both, fuse, and feel what works.');
+    setStatus('Done — 3-page test gallery. Print all, fuse, and feel what works.');
+  });
+});
+
+demoMapBtn.addEventListener('click', () => {
+  void withBusy('Rendering demo map…', async () => {
+    const pdf = await renderDemoMap(paperSelect.value as PaperSize, { ghostText: ghostCheckbox.checked });
+    showPdf(pdf, 'tastmap-demo-map.pdf');
+    setStatus('Done — synthetic demo map (whole vocabulary, no braille). Ink key at the bottom.');
   });
 });
 

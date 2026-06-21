@@ -96,6 +96,9 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
       `npx vite-node scripts/testsheets.ts`.
 - [x] Generalization: Douglas–Peucker simplify + per-part min-length drop.
       (Minimum-*separation* displacement still TODO.)
+- [x] Demo map (`core/demoMap`, "Demo map" button) — a synthetic one-page town
+      exercising the whole validated vocabulary (every line type, area fill, rail,
+      icons), no braille, with an ink key.
 - [x] Map furniture: scale bar, north indicator, title block (braille + ink).
 - [ ] Area features with tactile **textures** (hatch / dot grids) — fill
       helpers exist in `core/scene/textures`; wire into the area pipeline.

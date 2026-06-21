@@ -20,7 +20,8 @@ export { collectLabelCandidates, placeLabels, buildLegendScenes, keyFor } from '
 export { buildFurniture, scaleBarDistance } from './furniture';
 export { simplify } from './geo/simplify';
 export { buildTestSheets } from './testsheets';
-export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets } from './pipeline';
+export { buildDemoMap } from './demoMap';
+export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets, renderDemoMap } from './pipeline';
 export type { MapParams, MapResult, CoverageParams } from './pipeline';
 export { styles, streetOverview } from './style/defaultStyle';
 export { TACTILE_LINES, TACTILE_AREAS, MIN_LINE_WIDTH_MM } from './style/vocabulary';

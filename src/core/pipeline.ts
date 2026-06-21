@@ -1,4 +1,5 @@
 import { buildCalibrationScene, type CalibrationParams } from './calibration';
+import { buildDemoMap } from './demoMap';
 import { basicTranslator, type BrailleCell, type Translator } from './braille/translate';
 import { printableRect } from './geo/clip';
 import { DEFAULT_MARGIN_MM, getPageDimensions, getPrintableArea, uniformMargins } from './geo/paper';
@@ -139,4 +140,9 @@ export async function renderCalibration(params: CalibrationParams, opts: RenderO
 /** Render the full multi-page tactile test-sheet gallery — no network. */
 export async function renderTestSheets(opts: RenderOptions = {}): Promise<Uint8Array> {
   return renderPdfPages(buildTestSheets(), opts);
+}
+
+/** Render the synthetic one-page demo map (whole vocabulary, no braille). */
+export async function renderDemoMap(paper: PaperSize = 'A4', opts: RenderOptions = {}): Promise<Uint8Array> {
+  return renderPdf(buildDemoMap(paper), opts);
 }
