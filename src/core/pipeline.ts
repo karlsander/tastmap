@@ -8,6 +8,7 @@ import { buildFurniture } from './furniture';
 import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
 import { renderPdf, renderPdfPages } from './pdf/render';
+import { roadLengths, type RoadLength } from './roads';
 import { buildScene } from './scene/build';
 import { classify } from './style/classify';
 import type { StyleSpec } from './style/types';
@@ -39,6 +40,8 @@ export interface MapResult {
    *  sub-threshold parts. Lower than featureCount when features fall in the
    *  margin; can exceed it when a feature is clipped into several pieces. */
   strokeCount: number;
+  /** Named roads in the section with their ground length (m), longest first. */
+  roads: RoadLength[];
 }
 
 /** Fetch slightly beyond the page so edge features aren't cut off mid-render. */
@@ -108,8 +111,9 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
     ),
   );
 
+  const roads = roadLengths(classified, projector, clip, params.scaleDenominator);
   const pdf = await renderPdf(scene);
-  return { pdf, featureCount: classified.length, strokeCount };
+  return { pdf, featureCount: classified.length, strokeCount, roads };
 }
 
 /** Render the calibration sheet to PDF bytes — no network, purely local. */

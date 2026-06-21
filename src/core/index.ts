@@ -18,6 +18,8 @@ export type { LiblouisGrade, LiblouisOptions, TranslateString } from './braille/
 export { collectLabelCandidates, placeLabels, buildLegendScenes, keyFor } from './label';
 export { buildFurniture, scaleBarDistance } from './furniture';
 export { simplify } from './geo/simplify';
+export { roadLengths } from './roads';
+export type { RoadLength } from './roads';
 export { buildTestSheets } from './testsheets';
 export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets } from './pipeline';
 export type { MapParams, MapResult, CoverageParams } from './pipeline';

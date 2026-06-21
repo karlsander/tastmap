@@ -10,6 +10,7 @@ import {
   type MapParams,
   type Orientation,
   type PaperSize,
+  type RoadLength,
   type Translator,
 } from '../core';
 import { geocode } from './geocode';
@@ -33,6 +34,7 @@ const titleInput = el<HTMLInputElement>('title');
 const paperSelect = el<HTMLSelectElement>('paper');
 const styleSelect = el<HTMLSelectElement>('style');
 const statusEl = el<HTMLParagraphElement>('status');
+const roadsEl = el<HTMLUListElement>('roads');
 const downloadEl = el<HTMLAnchorElement>('download');
 const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
@@ -74,6 +76,16 @@ function readParams(): MapParams {
 
 function setStatus(message: string): void {
   statusEl.textContent = message;
+}
+
+/** Render the per-road length list (longest first); clears when empty. */
+function showRoads(roads: RoadLength[]): void {
+  roadsEl.replaceChildren();
+  for (const r of roads) {
+    const li = document.createElement('li');
+    li.textContent = `${r.name} — ${Math.round(r.lengthM)} m`;
+    roadsEl.append(li);
+  }
 }
 
 function refreshFootprint(): void {
@@ -142,6 +154,7 @@ function showPdf(pdf: Uint8Array, downloadName: string): void {
 async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<void> {
   const buttons = [generateBtn, calibrateBtn, testSheetsBtn];
   for (const b of buttons) b.disabled = true;
+  showRoads([]);
   setStatus(busyMessage);
   try {
     await run();
@@ -171,10 +184,11 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount } = await generateMap({ ...params, translator });
+    const { pdf, strokeCount, roads } = await generateMap({ ...params, translator });
     showPdf(pdf, 'tastmap.pdf');
+    showRoads(roads);
     const braille = translator ? 'liblouis German' : 'placeholder braille';
-    setStatus(`Done — ${strokeCount} strokes drawn (furniture braille: ${braille}).`);
+    setStatus(`Done — ${strokeCount} strokes (furniture braille: ${braille}). ${roads.length} named roads in this section:`);
   });
 });
 
