@@ -36,6 +36,7 @@ const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
 const calibrateBtn = el<HTMLButtonElement>('calibrate');
 const testSheetsBtn = el<HTMLButtonElement>('testsheets');
+const ghostCheckbox = el<HTMLInputElement>('ghost');
 
 // Populate the style dropdown from the registry.
 for (const spec of Object.values(styles)) {
@@ -168,7 +169,7 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, labelCount, pageCount } = await generateMap({ ...params, translator });
+    const { pdf, strokeCount, labelCount, pageCount } = await generateMap({ ...params, translator, ghostText: ghostCheckbox.checked });
     showPdf(pdf, 'tastmap.pdf');
     const braille = translator ? 'liblouis German' : 'placeholder braille';
     setStatus(`Done — ${strokeCount} strokes, ${labelCount} labels (${braille}), ${pageCount} pages.`);
@@ -177,7 +178,7 @@ form.addEventListener('submit', (e) => {
 
 calibrateBtn.addEventListener('click', () => {
   void withBusy('Rendering calibration sheet…', async () => {
-    const pdf = await renderCalibration({ paper: paperSelect.value as PaperSize, marginMm: readMargin() });
+    const pdf = await renderCalibration({ paper: paperSelect.value as PaperSize, marginMm: readMargin() }, { ghostText: ghostCheckbox.checked });
     showPdf(pdf, 'tastmap-calibration.pdf');
     setStatus('Done — calibration sheet. Print on Schwellpapier, fuse, then feel each row.');
   });
@@ -185,7 +186,7 @@ calibrateBtn.addEventListener('click', () => {
 
 testSheetsBtn.addEventListener('click', () => {
   void withBusy('Rendering test-sheet gallery…', async () => {
-    const pdf = await renderTestSheets();
+    const pdf = await renderTestSheets({ ghostText: ghostCheckbox.checked });
     showPdf(pdf, 'tastmap-test-sheets.pdf');
     setStatus('Done — 2-page test gallery. Print both, fuse, and feel what works.');
   });

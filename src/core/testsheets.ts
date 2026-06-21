@@ -4,6 +4,7 @@ import { printableRect } from './geo/clip';
 import { getPageDimensions, uniformMargins } from './geo/paper';
 import type { PointMm, RectMm } from './geo/types';
 import { createPage, type Page } from './scene/layout';
+import { ICON_KINDS, icon } from './scene/icons';
 import { arcPoints, beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './scene/lines';
 import { crossHatchFill, dotFill, filledPolygon, filledRect, hatchFill, rectOutline } from './scene/textures';
 import type { PathPrimitive, Primitive, Scene } from './scene/types';
@@ -234,7 +235,7 @@ function drawJunction(p: Page, ox: number, oy: number): void {
   const B = 3;
   const rightEnd = ox + 106;
   const topEnd = oy + 6;
-  const botEnd = oy + 90;
+  const botEnd = oy + 80;
 
   p.add(segment(at(ox, cy - B), at(cx - B, cy - B), 0.5), segment(at(ox, cy + B), at(cx - B, cy + B), 0.5));
   p.add(segment(at(cx + B, cy - B), at(rightEnd, cy - B), 0.5), segment(at(cx + B, cy + B), at(rightEnd, cy + B), 0.5));
@@ -252,7 +253,7 @@ function drawJunction(p: Page, ox: number, oy: number): void {
   p.add(...ladderPath(at(cx + 22, cy), at(cx + 28, cy), { tieLengthMm: 2 * B, tieSpacingMm: 1.3, widthMm: 0.5 }));
   p.add(...ladderPath(at(cx, cy + B + 3), at(cx, botEnd - 3), { tieLengthMm: 4, tieSpacingMm: 5, widthMm: 0.35, rails: true, railGapMm: 3, railWidthMm: 0.4 }));
 
-  const plat: RectMm = { minX: cx + B + 5, minY: cy + 16, maxX: cx + B + 13, maxY: cy + 40 };
+  const plat: RectMm = { minX: cx + B + 5, minY: cy + 10, maxX: cx + B + 13, maxY: cy + 30 };
   p.add(rectOutline(plat, 0.5), ...dotFill(plat, { spacingMm: 3, radiusMm: 0.55 }));
   const ay = (plat.minY + plat.maxY) / 2;
   p.add(segment(at(plat.minX - 4, ay - 2), at(plat.minX, ay), 0.5), segment(at(plat.minX - 4, ay + 2), at(plat.minX, ay), 0.5));
@@ -263,8 +264,8 @@ function drawJunction(p: Page, ox: number, oy: number): void {
   key(3, cx + 23, cy - 4.5);
   key(4, ox + 22, cy + so + 3.5);
   key(5, cx + B + 5, cy - so - 0.5);
-  key(6, cx + 5, cy + 14);
-  key(7, plat.maxX + 1.5, cy + 15);
+  key(6, cx + 5, cy + 10);
+  key(7, plat.maxX + 1.5, cy + 9);
   key(8, plat.minX - 6, ay - 2.5);
   p.text('1 casing 2 junction 3 crossing 4 walk 5 curb 6 tram 7 stop 8 board', ox, botEnd + 5, 2.1);
 }
@@ -334,7 +335,7 @@ function mapPage(): Scene {
   }
 
   // Hierarchy below the top band.
-  let y = A.minY + 110;
+  let y = A.minY + 100;
   p.text('hierarchy   single | casing', A.minX, y, SEC);
   y += 4;
   drawNet(p, A.minX, y, 66, 34, false);
@@ -416,7 +417,7 @@ function mapPage(): Scene {
     p.add(...dotFill(plat, { spacingMm: 2.8, radiusMm: 0.55 }));
     entry(plat);
   };
-  y = detailRow(p, A, y, 'tram boarding', 22, [
+  const tramVariants: Variation[] = [
     {
       l: 'arrow',
       draw: (c) =>
@@ -445,7 +446,36 @@ function mapPage(): Scene {
           p.add(...beadedPath([at(plat.minX, plat.minY + 2), at(plat.minX, plat.maxY - 2)], { spacingMm: 2, radiusMm: 0.7 }));
         }),
     },
-  ]);
+  ];
+
+  // Band: tram boarding tests (compact, left) + point-icons in 3 strengths (right).
+  const bandTop = y;
+  p.text('tram boarding', A.minX, bandTop, SEC);
+  const tcW = 22;
+  const tcH = 22;
+  const tcTop = bandTop + 3;
+  tramVariants.forEach((v, i) => {
+    const x = A.minX + i * (tcW + 2);
+    v.draw({ minX: x, minY: tcTop, maxX: x + tcW, maxY: tcTop + tcH });
+    p.text(v.l, x, tcTop + tcH + 2.6, TINY);
+  });
+
+  const gx0 = A.minX + 76;
+  p.text('icons · 3 strengths (0.4 / 0.8 / 1.4)', gx0, bandTop, SEC);
+  const colW = (A.maxX - gx0) / ICON_KINDS.length;
+  const iconSize = 10;
+  const rowStep = 10.5;
+  const gTop = bandTop + 5;
+  const strengths = [0.4, 0.8, 1.4];
+  ICON_KINDS.forEach((kind, ci) => {
+    const colCx = gx0 + ci * colW + colW / 2;
+    p.text(kind.slice(0, 6), gx0 + ci * colW, gTop, TINY - 0.4);
+    strengths.forEach((sMm, ri) => {
+      const cyc = gTop + 4 + ri * rowStep + iconSize / 2;
+      p.add(...icon(kind, at(colCx, cyc), iconSize, sMm));
+    });
+  });
+  y = gTop + 4 + strengths.length * rowStep + 3;
 
   // Bottom band: solids on the left, thick curved lines on the right.
   const by = y + 3;
