@@ -5,7 +5,7 @@ import { getPageDimensions, uniformMargins } from './geo/paper';
 import type { PointMm, RectMm } from './geo/types';
 import { clearTextureAroundLine, clipTextureToPolygon } from './scene/fill';
 import { ICON_KINDS, icon } from './scene/icons';
-import { arcPoints, beadedPath, ladderPath, parallelPair, segment, wavyPath } from './scene/lines';
+import { arcPoints, beadedPath, ladderPath, parallelPair, segment, wavyFill, wavyPath } from './scene/lines';
 import { createPage, type Page } from './scene/layout';
 import { crossHatchFill, dotFill, hatchFill, rectOutline } from './scene/textures';
 import type { PathPrimitive, Primitive, Scene } from './scene/types';
@@ -221,6 +221,39 @@ function linesPage(): Scene {
 // ---------------------------------------------------------------------------
 // Page 2 — MAP
 // ---------------------------------------------------------------------------
+
+/** A snaking (sinusoidal) centreline from x0 to x1 about vertical centre yc. */
+function snake(x0: number, yc: number, x1: number, amplitudeMm: number, waves: number): PointMm[] {
+  const n = 24;
+  const pts: PointMm[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    pts.push(at(x0 + (x1 - x0) * t, yc + Math.sin(t * waves * 2 * Math.PI) * amplitudeMm));
+  }
+  return pts;
+}
+
+/** Offset a polyline by `dist` along its per-vertex normal. */
+function offsetPolyline(pts: PointMm[], dist: number): PointMm[] {
+  return pts.map((p, i) => {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return at(p.x + (-dy / len) * dist, p.y + (dx / len) * dist);
+  });
+}
+
+/** A ribbon (band) around a centreline: closed polygon for filling + the two edges. */
+function ribbon(center: PointMm[], halfWidthMm: number): { poly: PointMm[]; left: PointMm[]; right: PointMm[] } {
+  const left = offsetPolyline(center, halfWidthMm);
+  const right = offsetPolyline(center, -halfWidthMm);
+  return { poly: [...left, ...right.slice().reverse()], left, right };
+}
+
+const strokePath = (pts: PointMm[], widthMm: number): PathPrimitive => ({ kind: 'path', closed: false, points: pts, stroke: { widthMm } });
+
 function drawNet(p: Page, ox: number, oy: number, w: number, h: number, casing: boolean): void {
   const major = (a: PointMm, b: PointMm): void => {
     if (casing) p.add(...parallelPair(a, b, { gapMm: 1.6, widthMm: 0.4 }));
@@ -299,7 +332,7 @@ function detailRow(p: Page, A: RectMm, y: number, label: string, cellH: number, 
 function mapPage(): Scene {
   const p = newPage();
   const A = p.area;
-  p.text('2 MAP   linear styles · hierarchy · junction · crossing / sidewalk / tram', A.minX, A.minY + 3, 3);
+  p.text('2 MAP   linear · hierarchy · junction · crossing/sidewalk/tram · patterned paths · rivers', A.minX, A.minY + 3, 3);
 
   drawJunction(p, A.minX, A.minY + 8);
   const lx = A.minX + 116;
@@ -433,7 +466,58 @@ function mapPage(): Scene {
         }),
     },
   ];
-  detailRow(p, A, y, 'tram boarding', 22, tramVariants);
+  y = detailRow(p, A, y, 'tram boarding', 22, tramVariants);
+  y += 2;
+
+  // Patterned paths (snaking) — a textured ribbon, with edges and raw.
+  p.text('patterned paths (snaking) — edge | raw', A.minX, y, SEC);
+  y += 4;
+  {
+    const bandH = 16;
+    const halfW = 3;
+    const cellW = 45;
+    const cyc = y + bandH / 2;
+    const pathVars: { l: string; fill: (r: RectMm) => Primitive[]; edge: boolean }[] = [
+      { l: 'dots edge', fill: (r) => dotFill(r, { spacingMm: 2.5, radiusMm: 0.5 }), edge: true },
+      { l: 'dots raw', fill: (r) => dotFill(r, { spacingMm: 2.5, radiusMm: 0.5 }), edge: false },
+      { l: 'h45 edge', fill: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 }), edge: true },
+      { l: 'x2 edge', fill: (r) => crossHatchFill(r, { spacingMm: 2, angleDeg: 45, widthMm: 0.4 }), edge: true },
+    ];
+    let cx = A.minX;
+    for (const v of pathVars) {
+      const { poly, left, right } = ribbon(snake(cx + 3, cyc, cx + cellW - 3, 2.2, 1.5), halfW);
+      p.add(...texturedPolygon(poly, v.fill));
+      if (v.edge) p.add(strokePath(left, 0.4), strokePath(right, 0.4));
+      p.text(v.l, cx, y + bandH + 2.6, TINY);
+      cx += cellW + 1;
+    }
+    y += bandH + 2.6 + 4;
+  }
+
+  // Rivers as an area (not just a line): different water fills + banks, + a bridge.
+  p.text('rivers as area — fill + banks · bridge', A.minX, y, SEC);
+  y += 4;
+  {
+    const bandH = 16;
+    const halfW = 4;
+    const cellW = 45;
+    const cyc = y + bandH / 2;
+    const river = (label: string, fill: ((r: RectMm) => Primitive[]) | null, banks: boolean, bridge = false): void => {
+      const { poly, left, right } = ribbon(snake(cx + 3, cyc, cx + cellW - 3, 2, bridge ? 1 : 1.2), halfW);
+      let body = fill ? texturedPolygon(poly, fill) : [];
+      if (bridge) body = clearTextureAroundLine(body, [at(cx + cellW / 2, y), at(cx + cellW / 2, y + bandH)], 1.5);
+      p.add(...body);
+      if (banks) p.add(strokePath(left, 0.5), strokePath(right, 0.5));
+      if (bridge) p.add(segment(at(cx + cellW / 2, y), at(cx + cellW / 2, y + bandH), 0.8));
+      p.text(label, cx, y + bandH + 2.6, TINY);
+      cx += cellW + 1;
+    };
+    let cx = A.minX;
+    river('h0 + banks', (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 0, widthMm: 0.4 }), true);
+    river('dots + banks', (r) => dotFill(r, { spacingMm: 2.5, radiusMm: 0.5 }), true);
+    river('wavy + banks', (r) => wavyFill(r, { amplitudeMm: 0.7, wavelengthMm: 6, rowGapMm: 2.5, widthMm: 0.4 }), true);
+    river('bridge (road over)', (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 0, widthMm: 0.4 }), true, true);
+  }
   return p.scene();
 }
 
