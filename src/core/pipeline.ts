@@ -5,12 +5,10 @@ import { DEFAULT_MARGIN_MM, getPageDimensions, getPrintableArea, uniformMargins 
 import { bboxFromCenter, groundMeters, makeProjector } from './geo/projection';
 import type { BBox, LngLat, Orientation, PaperSize, RectMm } from './geo/types';
 import { buildFurniture } from './furniture';
-import { buildLegendScenes, collectLabelCandidates, placeLabels } from './label';
 import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
 import { renderPdf, renderPdfPages } from './pdf/render';
 import { buildScene } from './scene/build';
-import type { Scene } from './scene/types';
 import { classify } from './style/classify';
 import type { StyleSpec } from './style/types';
 import { buildTestSheets } from './testsheets';
@@ -23,12 +21,8 @@ export interface MapParams {
   style: StyleSpec;
   /** Uniform printable margin in millimetres. Defaults to {@link DEFAULT_MARGIN_MM}. */
   marginMm?: number;
-  /** Place keyed braille labels + a legend page. Default true. */
-  labels?: boolean;
-  /** Braille translator (default: uncontracted placeholder; swap for liblouis). */
+  /** Braille translator for the furniture (default: uncontracted placeholder; swap for liblouis). */
   translator?: Translator;
-  /** Cap on placed labels to keep the map legible. */
-  maxLabels?: number;
   /** Title shown in the furniture band (ink + braille). Defaults to "1:N". */
   title?: string;
   /** Douglas–Peucker simplification tolerance (page mm); defaults applied in buildScene. */
@@ -45,10 +39,6 @@ export interface MapResult {
    *  sub-threshold parts. Lower than featureCount when features fall in the
    *  margin; can exceed it when a feature is clipped into several pieces. */
   strokeCount: number;
-  /** Keyed braille labels placed on the map. */
-  labelCount: number;
-  /** Total PDF pages (map + any legend pages). */
-  pageCount: number;
 }
 
 /** Fetch slightly beyond the page so edge features aren't cut off mid-render. */
@@ -102,22 +92,15 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   const translate = (s: string): BrailleCell[] => (params.translator ?? basicTranslator).translate(s);
 
   // Reserve a band at the bottom of the printable area for map furniture; the
-  // map (and its labels) clip to the area above it.
+  // map clips to the area above it.
   const printable = printableRect(dim, margins);
   const clip: RectMm = { ...printable, maxY: printable.maxY - FURNITURE_BAND_MM };
   const scene = buildScene(classified, projector, clip, { simplifyToleranceMm: params.simplifyToleranceMm });
   const strokeCount = scene.primitives.length;
 
-  let labelCount = 0;
-  let legendPages: Scene[] = [];
-  if (params.labels !== false) {
-    const candidates = collectLabelCandidates(classified, projector, clip);
-    const { placed } = placeLabels(candidates, clip, translate, params.maxLabels);
-    for (const pl of placed) scene.primitives.push(...pl.dots);
-    legendPages = buildLegendScenes(placed, params.paper, params.marginMm ?? DEFAULT_MARGIN_MM, translate);
-    labelCount = placed.length;
-  }
-
+  // Keyed braille labels + a legend page are shelved pending a different
+  // approach; the braille rendering itself (furniture below, core/braille,
+  // core/label) is kept. The furniture scale/north/title still use braille.
   scene.primitives.push(
     ...buildFurniture(
       { minX: printable.minX, minY: printable.maxY - FURNITURE_BAND_MM, maxX: printable.maxX, maxY: printable.maxY },
@@ -125,8 +108,8 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
     ),
   );
 
-  const pdf = await renderPdfPages([scene, ...legendPages]);
-  return { pdf, featureCount: classified.length, strokeCount, labelCount, pageCount: 1 + legendPages.length };
+  const pdf = await renderPdf(scene);
+  return { pdf, featureCount: classified.length, strokeCount };
 }
 
 /** Render the calibration sheet to PDF bytes — no network, purely local. */

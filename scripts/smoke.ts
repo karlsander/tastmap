@@ -10,7 +10,7 @@ const PT_PER_MM = 72 / 25.4;
 console.log('Fetching from Overpass and rendering…');
 const t0 = performance.now();
 
-const { pdf, featureCount, strokeCount, labelCount, pageCount } = await generateMap({
+const { pdf, featureCount, strokeCount } = await generateMap({
   center: { lng: 8.7665, lat: 50.8021 }, // Marburg
   scaleDenominator: 2500,
   paper: 'A4',
@@ -28,7 +28,6 @@ const { width, height } = doc.getPage(0).getSize();
 console.log(`ok in ${ms} ms`);
 console.log(`features matched:  ${featureCount}`);
 console.log(`strokes drawn:     ${strokeCount}`);
-console.log(`braille labels:    ${labelCount} (result pageCount ${pageCount})`);
 console.log(`pdf bytes:        ${pdf.byteLength}`);
 console.log(`pages:            ${doc.getPageCount()}`);
 console.log(

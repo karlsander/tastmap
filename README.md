@@ -100,8 +100,10 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 - [x] Address search (Nominatim) to pick the map centre.
 - [ ] Area features with tactile **textures** (hatch / dot grids) — fill
       helpers exist in `core/scene/textures`; wire into the area pipeline.
-- [x] Braille labels: collision-aware keyed placement on the map.
-- [x] Keyed legend page (braille + ink), paginated.
+- [~] Braille labels + keyed legend: keyed placement + paginated legend exist
+      (`core/label`, tested) but are **not currently applied to maps** — shelved
+      pending a different labelling approach. All braille rendering is kept
+      (`core/braille`, liblouis); the map furniture still uses braille.
 - [x] **liblouis** German braille (Vollschrift) in the browser, with the
       uncontracted placeholder as fallback. Note: liblouis is **GPL-3.0**, so the
       bundled app inherits GPL.

@@ -171,10 +171,10 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, labelCount, pageCount } = await generateMap({ ...params, translator });
+    const { pdf, strokeCount } = await generateMap({ ...params, translator });
     showPdf(pdf, 'tastmap.pdf');
     const braille = translator ? 'liblouis German' : 'placeholder braille';
-    setStatus(`Done — ${strokeCount} strokes, ${labelCount} labels (${braille}), ${pageCount} pages.`);
+    setStatus(`Done — ${strokeCount} strokes drawn (furniture braille: ${braille}).`);
   });
 });
 

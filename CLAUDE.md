@@ -63,5 +63,6 @@ parallel-pair, scatter); a condensed **2-page test-sheet gallery**
 print-run evaluation of every
 candidate width/texture/symbol; feed its results back into `defaultStyle.ts`
 and real symbology (`lines`/`textures` are the building blocks to select from).
-Keyed braille labels + paginated legend (`core/label`): named features get short
-braille keys on the map, full names in a legend; multi-page PDF via `renderPdfPages`.
+Keyed braille labels + paginated legend (`core/label`) exist and are tested, but
+are **currently disconnected from `generateMap`** (shelved pending a different
+labelling approach). Maps are single-page; only the furniture uses braille.
