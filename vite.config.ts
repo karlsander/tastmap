@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Static, fully client-side app. Overpass + OSM tiles are called from the browser.
+  // `plugins` is present (even if empty) so Cloudflare's build auto-config can
+  // inject its Vite plugin.
+  plugins: [],
   build: {
     target: 'es2022',
   },
