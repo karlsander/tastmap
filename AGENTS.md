@@ -66,8 +66,8 @@ finger and usable even in small areas:
    **Calibration sheet**; tick **Ghost text** to print the fuse-ready, label-free
    version (heated text turns to mush); keep the normal PDF as the key.
 2. Fuse, feel, and record what reads → update `vocabulary.ts` and this file.
-3. Open questions still on the test sheets to settle: the **rail** line type;
-   textured **landmass edges** (outline vs raw) and **lines through textures**
-   (with vs without a 1 mm clearing); **cross-hatch "solid"** density (x1 vs
-   x0.5); **icon strength** (p2, 0.4/0.8/1.4 mm); min feature **separation** for
-   generalization; braille dot legibility.
+3. Open questions still on the test sheets to settle (all on p3 now): the **rail**
+   line type; textured **landmass edges** (outline vs raw); **lines through
+   textures** with a **2 mm clearing** (over h45 / x2 / dots2.5); **cross-hatch
+   "solid"** density (x1 vs x0.5); **icon strength** (0.4/0.8/1.4 mm); plus min
+   feature **separation** for generalization and braille dot legibility.

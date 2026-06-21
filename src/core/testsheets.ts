@@ -7,7 +7,7 @@ import { clearTextureAroundLine, clipTextureToPolygon } from './scene/fill';
 import { ICON_KINDS, icon } from './scene/icons';
 import { arcPoints, beadedPath, ladderPath, parallelPair, segment, wavyPath } from './scene/lines';
 import { createPage, type Page } from './scene/layout';
-import { crossHatchFill, dotFill, filledPolygon, hatchFill, rectOutline } from './scene/textures';
+import { crossHatchFill, dotFill, hatchFill, rectOutline } from './scene/textures';
 import type { PathPrimitive, Primitive, Scene } from './scene/types';
 
 /**
@@ -130,7 +130,7 @@ function curvedCornerSample(box: RectMm, widthMm: number): PathPrimitive {
 function linesPage(): Scene {
   const p = newPage();
   const A = p.area;
-  p.text('1 LINES   width · step · braille · dash · separation · dots · rail · curves', A.minX, A.minY + 3, 3);
+  p.text('1 LINES   width · step · braille · dash · separation · dots · curves', A.minX, A.minY + 3, 3);
   const colL = A.minX;
   const colR = A.minX + 100;
   const len = 80;
@@ -205,32 +205,8 @@ function linesPage(): Scene {
     yr += h;
   }
 
-  // Rail line candidate (6th type): centre line with cross-ties, + ties-only.
-  let y = Math.max(yl, yr) + 4;
-  p.text('rail line (candidate 6th type)', A.minX, y, SEC);
-  y += 4;
-  const railLen = 80;
-  const rail = (l: string, draw: (m: number) => void): void => {
-    const h = 8;
-    const my = y + h / 2;
-    draw(my);
-    p.text(l, A.minX + railLen + 4, my + 0.8, TINY);
-    y += h;
-  };
-  rail('centre 0.8 + ties 0.4 @2', (m) => {
-    p.add(segment(at(A.minX, m), at(A.minX + railLen, m), 0.8));
-    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 3, tieSpacingMm: 2, widthMm: 0.4 }));
-  });
-  rail('centre 0.8 + ties 1.0 @5', (m) => {
-    p.add(segment(at(A.minX, m), at(A.minX + railLen, m), 0.8));
-    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 4, tieSpacingMm: 5, widthMm: 1.0 }));
-  });
-  rail('ties only 0.8, 3mm @3', (m) => {
-    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 3, tieSpacingMm: 3, widthMm: 0.8 }));
-  });
-
   // Thick curves.
-  y += 5;
+  let y = Math.max(yl, yr) + 6;
   p.text('thick curves (mm) · curve + corner', A.minX, y, SEC);
   y += 4;
   let cx = A.minX;
@@ -323,7 +299,7 @@ function detailRow(p: Page, A: RectMm, y: number, label: string, cellH: number, 
 function mapPage(): Scene {
   const p = newPage();
   const A = p.area;
-  p.text('2 MAP   linear styles · hierarchy · junction · crossing / sidewalk / tram · icons', A.minX, A.minY + 3, 3);
+  p.text('2 MAP   linear styles · hierarchy · junction · crossing / sidewalk / tram', A.minX, A.minY + 3, 3);
 
   drawJunction(p, A.minX, A.minY + 8);
   const lx = A.minX + 116;
@@ -457,32 +433,7 @@ function mapPage(): Scene {
         }),
     },
   ];
-  const bandTop = y;
-  p.text('tram boarding', A.minX, bandTop, SEC);
-  const tcW = 22;
-  const tcH = 22;
-  const tcTop = bandTop + 3;
-  tramVariants.forEach((v, i) => {
-    const x = A.minX + i * (tcW + 2);
-    v.draw({ minX: x, minY: tcTop, maxX: x + tcW, maxY: tcTop + tcH });
-    p.text(v.l, x, tcTop + tcH + 2.6, TINY);
-  });
-
-  const gx0 = A.minX + 76;
-  p.text('icons · 3 strengths (0.4 / 0.8 / 1.4)', gx0, bandTop, SEC);
-  const colW = (A.maxX - gx0) / ICON_KINDS.length;
-  const iconSize = 10;
-  const rowStep = 10.5;
-  const gTop = bandTop + 5;
-  const strengths = [0.4, 0.8, 1.4];
-  ICON_KINDS.forEach((kind, ci) => {
-    const colCx = gx0 + ci * colW + colW / 2;
-    p.text(kind.slice(0, 6), gx0 + ci * colW, gTop, TINY - 0.4);
-    strengths.forEach((sMm, ri) => {
-      const cyc = gTop + 4 + ri * rowStep + iconSize / 2;
-      p.add(...icon(kind, at(colCx, cyc), iconSize, sMm));
-    });
-  });
+  detailRow(p, A, y, 'tram boarding', 22, tramVariants);
   return p.scene();
 }
 
@@ -496,20 +447,20 @@ function texturedPolygon(poly: PointMm[], fill: (r: RectMm) => Primitive[]): Pri
 function texturesPage(): Scene {
   const p = newPage();
   const A = p.area;
-  p.text('3 TEXTURES   fills · landmass edges · lines through · cross-hatch solids', A.minX, A.minY + 3, 3);
+  p.text('3 TEXTURES   fills · landmass · lines through · solids + icons · rail', A.minX, A.minY + 3, 3);
   let y = A.minY + 9;
 
   // 1. Kept pattern fills (reference swatches).
   p.text('pattern fills (kept)', A.minX, y, SEC);
   y += 4;
-  y = swatchGrid(p, PATTERNS, A.minX, y, A.maxX, 26, 14);
-  y += 2;
+  y = swatchGrid(p, PATTERNS, A.minX, y, A.maxX, 26, 13);
+  y += 1;
 
   // 2. Landmass shapes — outline vs raw edge.
   p.text('landmass — outline | raw edge', A.minX, y, SEC);
   y += 4;
   {
-    const r = 12;
+    const r = 11;
     const cy = y + r;
     let cx = A.minX + r;
     for (const t of [PATTERNS[0], PATTERNS[1], PATTERNS[3]]) {
@@ -526,50 +477,91 @@ function texturesPage(): Scene {
     y = cy + r + 6;
   }
 
-  // 3 & 4. Lines through an h45 texture — without / with 1mm clearing.
-  const linesThrough = (clearMm: number, label: string): void => {
-    p.text(label, A.minX, y, SEC);
-    y += 3;
-    const cw = 29;
-    const ch = 22;
-    let cx = A.minX;
-    for (const lt of LINE_TYPES) {
-      const cell: RectMm = { minX: cx, minY: y, maxX: cx + cw, maxY: y + ch };
-      const linePts = [at(cx + cw * 0.5, y), at(cx + cw * 0.5, y + ch * 0.55), at(cx + cw * 0.85, y + ch)];
-      let tex: Primitive[] = hatchFill(cell, { spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 });
-      if (clearMm > 0) tex = clearTextureAroundLine(tex, linePts, clearMm);
-      p.add(...tex);
+  // 3. Lines through textures — 2 mm clearing — over h45, x2 and dots2.5.
+  const CLEAR = 2;
+  const throughTex: { l: string; fn: (r: RectMm) => Primitive[] }[] = [
+    { l: 'h45', fn: (r) => hatchFill(r, { spacingMm: 2.5, angleDeg: 45, widthMm: 0.4 }) },
+    { l: 'x2', fn: (r) => crossHatchFill(r, { spacingMm: 2, angleDeg: 45, widthMm: 0.4 }) },
+    { l: 'dots2.5', fn: (r) => dotFill(r, { spacingMm: 2.5, radiusMm: 0.5 }) },
+  ];
+  p.text(`lines through texture — ${CLEAR} mm clearing`, A.minX, y, SEC);
+  y += 4;
+  const gut = 14;
+  const cw = 30;
+  const ch = 20;
+  LINE_TYPES.forEach((lt, li) => p.text(lt, A.minX + gut + li * cw, y, TINY - 0.3));
+  y += 3;
+  throughTex.forEach((tx) => {
+    p.text(tx.l, A.minX, y + ch / 2, TINY);
+    LINE_TYPES.forEach((lt, li) => {
+      const cx = A.minX + gut + li * cw;
+      const cell: RectMm = { minX: cx, minY: y, maxX: cx + cw - 2, maxY: y + ch };
+      const linePts = [at(cx + cw * 0.45, y), at(cx + cw * 0.45, y + ch * 0.55), at(cx + cw * 0.8, y + ch)];
+      p.add(...clearTextureAroundLine(tx.fn(cell), linePts, CLEAR));
       p.add(...drawLineType(lt, linePts));
-      p.text(lt, cx, y + ch + 2.6, TINY);
-      cx += cw + 1;
-    }
-    y += ch + 2.6 + 4;
-  };
-  linesThrough(0, 'lines through h45 — no clearing');
-  linesThrough(1, 'lines through h45 — 1 mm clearing');
+    });
+    y += ch + 2;
+  });
+  y += 3;
 
-  // 5. "Solid" shapes via dense cross-hatch (vs one true solid).
-  p.text('"solid" via cross-hatch (x1 / x0.5) vs true solid', A.minX, y, SEC);
+  // 4. Cross-hatch "solids" (2×2, left) next to the icon set (3 strengths, right).
+  p.text('"solid" via cross-hatch (x1 / x0.5)        icons · 3 strengths (0.4 / 0.8 / 1.4)', A.minX, y, SEC);
   y += 4;
   {
-    const r = 11;
-    const cy = y + r;
-    let cx = A.minX + r;
-    const tri = (c: number): PointMm[] => [at(c, cy - r), at(c + r * 0.9, cy + r * 0.6), at(c - r * 0.9, cy + r * 0.6)];
+    const r = 10;
     const xhatch = (sp: number) => (rr: RectMm): Primitive[] => crossHatchFill(rr, { spacingMm: sp, angleDeg: 45, widthMm: 0.4 });
-    const shapes: { label: string; build: () => Primitive[] }[] = [
-      { label: 'circ x1', build: () => withOutline(circlePoly(cx, cy, r), xhatch(1)) },
-      { label: 'circ x0.5', build: () => withOutline(circlePoly(cx, cy, r), xhatch(0.5)) },
-      { label: 'tri x1', build: () => withOutline(tri(cx), xhatch(1)) },
-      { label: 'tri x0.5', build: () => withOutline(tri(cx), xhatch(0.5)) },
-      { label: 'circ solid', build: () => [filledPolygon(circlePoly(cx, cy, r))] },
+    const triPoly = (cx: number, cy: number): PointMm[] => [at(cx, cy - r), at(cx + r * 0.9, cy + r * 0.6), at(cx - r * 0.9, cy + r * 0.6)];
+    const solids: { label: string; build: (cx: number, cy: number) => Primitive[] }[] = [
+      { label: 'circ x1', build: (cx, cy) => withOutline(circlePoly(cx, cy, r), xhatch(1)) },
+      { label: 'circ x0.5', build: (cx, cy) => withOutline(circlePoly(cx, cy, r), xhatch(0.5)) },
+      { label: 'tri x1', build: (cx, cy) => withOutline(triPoly(cx, cy), xhatch(1)) },
+      { label: 'tri x0.5', build: (cx, cy) => withOutline(triPoly(cx, cy), xhatch(0.5)) },
     ];
-    for (const s of shapes) {
-      p.add(...s.build());
-      p.text(s.label, cx - r, cy + r + 3, TINY);
-      cx += 2 * r + 6;
-    }
+    const col0 = A.minX + r;
+    const col1 = A.minX + 3 * r + 8;
+    const positions = [[col0, y + r], [col1, y + r], [col0, y + 3 * r + 10], [col1, y + 3 * r + 10]];
+    solids.forEach((s, i) => {
+      const [cx, cy] = positions[i];
+      p.add(...s.build(cx, cy));
+      p.text(s.label, cx - r, cy + r + 2.6, TINY);
+    });
+
+    const gx0 = A.minX + 62;
+    const colW = (A.maxX - gx0) / ICON_KINDS.length;
+    const iconSize = 10;
+    const gTop = y;
+    ICON_KINDS.forEach((kind, ci) => {
+      const colCx = gx0 + ci * colW + colW / 2;
+      p.text(kind.slice(0, 6), gx0 + ci * colW, gTop, TINY - 0.4);
+      [0.4, 0.8, 1.4].forEach((sMm, ri) => {
+        p.add(...icon(kind, at(colCx, gTop + 4 + ri * 10.5 + iconSize / 2), iconSize, sMm));
+      });
+    });
+    y += 4 * r + 17;
   }
+
+  // 5. Rail line candidate (moved from page 1), at the bottom.
+  p.text('rail line (candidate 6th type)', A.minX, y, SEC);
+  y += 4;
+  const railLen = 80;
+  const rail = (l: string, draw: (m: number) => void): void => {
+    const h = 8;
+    const my = y + h / 2;
+    draw(my);
+    p.text(l, A.minX + railLen + 4, my + 0.8, TINY);
+    y += h;
+  };
+  rail('centre 0.8 + ties 0.4 @2', (m) => {
+    p.add(segment(at(A.minX, m), at(A.minX + railLen, m), 0.8));
+    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 3, tieSpacingMm: 2, widthMm: 0.4 }));
+  });
+  rail('centre 0.8 + ties 1.0 @5', (m) => {
+    p.add(segment(at(A.minX, m), at(A.minX + railLen, m), 0.8));
+    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 4, tieSpacingMm: 5, widthMm: 1.0 }));
+  });
+  rail('ties only 0.8, 3mm @3', (m) => {
+    p.add(...ladderPath(at(A.minX, m), at(A.minX + railLen, m), { tieLengthMm: 3, tieSpacingMm: 3, widthMm: 0.8 }));
+  });
   return p.scene();
 }
 
