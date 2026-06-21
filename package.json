@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "description": "Browser tool that turns OpenStreetMap data into tactile maps (Schwellpapier) as printable A4/A3 PDFs.",
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -114,3 +114,9 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 
 Map data © OpenStreetMap contributors, available under the
 [Open Database License](https://www.openstreetmap.org/copyright).
+
+## License
+
+[GNU GPL v3.0 or later](LICENSE). The app bundles
+[liblouis](https://github.com/liblouis/liblouis) (LGPL/GPL) for German braille,
+so the whole project is distributed under the GPL.
