@@ -70,6 +70,12 @@ legend {
   width: 7rem;
 }
 
+/* The fieldset already pads the top; drop the paragraph's own top margin so the
+   help text sits close to the legend. */
+#picker-help {
+  margin-top: 0;
+}
+
 #picker {
   height: 18rem;
   margin-bottom: var(--gap);
