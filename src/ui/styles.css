@@ -1,6 +1,6 @@
 :root {
   --gap: 1rem;
-  --maxw: 60rem;
+  --maxw: 64rem;
   font-family: system-ui, sans-serif;
   line-height: 1.5;
   color: #111;
@@ -25,7 +25,7 @@ main {
 
 @media (min-width: 60rem) {
   main {
-    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
     align-items: start;
   }
 }
@@ -64,8 +64,10 @@ legend {
   font-size: 1rem;
 }
 
-.orientation label {
-  margin-right: 1rem;
+/* Keep numeric fields compact so Paper Setup (paper / margin / orientation)
+   fits on a single row. */
+.field input[type='number'] {
+  width: 7rem;
 }
 
 #picker {

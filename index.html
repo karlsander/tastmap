@@ -22,12 +22,14 @@
               <label for="margin">Margin (mm)</label>
               <input id="margin" name="margin" type="number" min="0" step="1" value="5" />
             </span>
+            <span class="field">
+              <label for="orientation">Orientation</label>
+              <select id="orientation" name="orientation">
+                <option value="portrait" selected>Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </span>
           </div>
-          <fieldset class="orientation">
-            <legend>Orientation</legend>
-            <label><input type="radio" name="orientation" value="portrait" checked /> Portrait</label>
-            <label><input type="radio" name="orientation" value="landscape" /> Landscape</label>
-          </fieldset>
         </fieldset>
 
         <fieldset>

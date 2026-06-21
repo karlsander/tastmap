@@ -31,6 +31,7 @@ const scaleInput = el<HTMLInputElement>('scale');
 const marginInput = el<HTMLInputElement>('margin');
 const titleInput = el<HTMLInputElement>('title');
 const paperSelect = el<HTMLSelectElement>('paper');
+const orientationSelect = el<HTMLSelectElement>('orientation');
 const styleSelect = el<HTMLSelectElement>('style');
 const statusEl = el<HTMLParagraphElement>('status');
 const roadsEl = el<HTMLUListElement>('roads');
@@ -51,8 +52,7 @@ styleSelect.value = streetOverview.id;
 const picker = createPicker(el('picker'), DEFAULT_CENTER);
 
 function orientation(): Orientation {
-  const checked = form.querySelector<HTMLInputElement>('input[name="orientation"]:checked');
-  return (checked?.value as Orientation) ?? 'portrait';
+  return orientationSelect.value as Orientation;
 }
 
 function readMargin(): number {
@@ -101,10 +101,9 @@ function refreshFootprint(): void {
 picker.onCenterChange(() => refreshFootprint());
 
 // Any setting that changes coverage → refresh footprint.
-for (const ctl of [scaleInput, marginInput, paperSelect]) {
+for (const ctl of [scaleInput, marginInput, paperSelect, orientationSelect]) {
   ctl.addEventListener('change', refreshFootprint);
 }
-form.querySelectorAll('input[name="orientation"]').forEach((r) => r.addEventListener('change', refreshFootprint));
 
 // --- Address search (geocode → recentre) ---
 async function runSearch(): Promise<void> {
