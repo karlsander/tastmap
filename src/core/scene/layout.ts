@@ -3,8 +3,8 @@ import type { Primitive, Scene } from './types';
 
 /**
  * A tiny top-down page builder in page millimetres: a primitive list plus a
- * vertical cursor and a few text/section helpers. Keeps the calibration and
- * test-sheet generators declarative instead of arithmetic-heavy.
+ * vertical cursor and a few text/section helpers. Keeps the test-sheet
+ * generator declarative instead of arithmetic-heavy.
  */
 export interface Page {
   readonly area: RectMm;

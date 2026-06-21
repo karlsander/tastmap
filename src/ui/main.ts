@@ -2,7 +2,6 @@ import './styles.css';
 import {
   DEFAULT_MARGIN_MM,
   generateMap,
-  renderCalibration,
   renderTestSheets,
   renderedBBox,
   streetOverview,
@@ -38,7 +37,6 @@ const roadsEl = el<HTMLUListElement>('roads');
 const downloadEl = el<HTMLAnchorElement>('download');
 const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
-const calibrateBtn = el<HTMLButtonElement>('calibrate');
 const testSheetsBtn = el<HTMLButtonElement>('testsheets');
 
 // Populate the style dropdown from the registry.
@@ -152,7 +150,7 @@ function showPdf(pdf: Uint8Array, downloadName: string): void {
 
 /** Run an async PDF producer while disabling the buttons and reporting status. */
 async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<void> {
-  const buttons = [generateBtn, calibrateBtn, testSheetsBtn];
+  const buttons = [generateBtn, testSheetsBtn];
   for (const b of buttons) b.disabled = true;
   showRoads([]);
   setStatus(busyMessage);
@@ -189,14 +187,6 @@ form.addEventListener('submit', (e) => {
     showRoads(roads);
     const braille = translator ? 'liblouis German' : 'placeholder braille';
     setStatus(`Done — ${strokeCount} strokes (furniture braille: ${braille}). ${roads.length} named roads in this section:`);
-  });
-});
-
-calibrateBtn.addEventListener('click', () => {
-  void withBusy('Rendering calibration sheet…', async () => {
-    const pdf = await renderCalibration({ paper: paperSelect.value as PaperSize, marginMm: readMargin() });
-    showPdf(pdf, 'tastmap-calibration.pdf');
-    setStatus('Done — calibration sheet. Print on Schwellpapier, fuse, then feel each row.');
   });
 });
 

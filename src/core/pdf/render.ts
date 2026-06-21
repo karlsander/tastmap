@@ -32,7 +32,7 @@ export async function renderPdf(scene: Scene): Promise<Uint8Array> {
 }
 
 /** Render several scenes to a multi-page PDF (one scene per page). Used for the
- *  calibration / test-sheet galleries and the keyed legend page. */
+ *  test-sheet gallery and the keyed legend page. */
 export async function renderPdfPages(scenes: Scene[]): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   // Helvetica is one of pdf-lib's built-in standard fonts, so ink labels need no

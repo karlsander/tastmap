@@ -17,10 +17,6 @@ body {
   padding: var(--gap);
 }
 
-header p {
-  max-width: 50ch;
-}
-
 main {
   display: grid;
   gap: calc(var(--gap) * 2);
@@ -95,11 +91,6 @@ button {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-}
-
-#calibrate {
-  background: #fff;
-  border: 1px solid #767676;
 }
 
 .roads {

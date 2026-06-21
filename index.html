@@ -6,15 +6,32 @@
     <title>Tastmap — tactile map generator</title>
   </head>
   <body>
-    <header>
-      <h1>Tastmap</h1>
-      <p>Generate a printable PDF from OpenStreetMap data, ready to turn into a tactile map on swell paper (Schwellpapier).</p>
-    </header>
-
     <main>
       <form id="map-form" novalidate>
         <fieldset>
-          <legend>Location</legend>
+          <legend>Paper Setup</legend>
+          <div class="row">
+            <span class="field">
+              <label for="paper">Paper size</label>
+              <select id="paper" name="paper">
+                <option value="A4" selected>A4</option>
+                <option value="A3">A3</option>
+              </select>
+            </span>
+            <span class="field">
+              <label for="margin">Margin (mm)</label>
+              <input id="margin" name="margin" type="number" min="0" step="1" value="5" />
+            </span>
+          </div>
+          <fieldset class="orientation">
+            <legend>Orientation</legend>
+            <label><input type="radio" name="orientation" value="portrait" checked /> Portrait</label>
+            <label><input type="radio" name="orientation" value="landscape" /> Landscape</label>
+          </fieldset>
+        </fieldset>
+
+        <fieldset>
+          <legend>Map Area</legend>
           <p id="picker-help">Search for an address, or drag the marker / click the map to choose the centre.</p>
           <div class="row">
             <span class="field grow">
@@ -27,47 +44,30 @@
             </span>
           </div>
           <div id="picker" role="application" aria-label="Map location picker" aria-describedby="picker-help"></div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Map settings</legend>
           <div class="row">
             <span class="field">
               <label for="scale">Scale 1:</label>
               <input id="scale" name="scale" type="number" min="100" step="100" value="1500" />
             </span>
-            <span class="field">
-              <label for="margin">Margin (mm)</label>
-              <input id="margin" name="margin" type="number" min="0" step="1" value="5" />
-            </span>
-            <span class="field">
-              <label for="paper">Paper size</label>
-              <select id="paper" name="paper">
-                <option value="A4" selected>A4</option>
-                <option value="A3">A3</option>
-              </select>
-            </span>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Map Style</legend>
+          <div class="row">
             <span class="field">
               <label for="style">Style</label>
               <select id="style" name="style"></select>
             </span>
-          </div>
-          <div class="row">
             <span class="field grow">
               <label for="title">Title (optional)</label>
               <input id="title" name="title" type="text" autocomplete="off" placeholder="e.g. Marburg Altstadt" />
             </span>
           </div>
-          <fieldset class="orientation">
-            <legend>Orientation</legend>
-            <label><input type="radio" name="orientation" value="portrait" checked /> Portrait</label>
-            <label><input type="radio" name="orientation" value="landscape" /> Landscape</label>
-          </fieldset>
         </fieldset>
 
         <div class="actions">
           <button type="submit" id="generate">Generate PDF</button>
-          <button type="button" id="calibrate">Calibration sheet</button>
           <button type="button" id="testsheets">Test sheets</button>
         </div>
       </form>
