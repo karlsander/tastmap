@@ -11,6 +11,7 @@ import {
   type PaperSize,
   type RoadLength,
   type Translator,
+  type TrimmedStreet,
 } from '../core';
 import { geocode } from './geocode';
 import { createPicker } from './picker';
@@ -33,8 +34,11 @@ const titleInput = el<HTMLInputElement>('title');
 const paperSelect = el<HTMLSelectElement>('paper');
 const orientationSelect = el<HTMLSelectElement>('orientation');
 const styleSelect = el<HTMLSelectElement>('style');
+const trimCheckbox = el<HTMLInputElement>('trim');
 const statusEl = el<HTMLParagraphElement>('status');
 const roadsEl = el<HTMLUListElement>('roads');
+const trimmedEl = el<HTMLUListElement>('trimmed');
+const trimmedHeading = el<HTMLParagraphElement>('trimmed-heading');
 const downloadEl = el<HTMLAnchorElement>('download');
 const previewEl = el<HTMLIFrameElement>('preview');
 const generateBtn = el<HTMLButtonElement>('generate');
@@ -69,6 +73,7 @@ function readParams(): MapParams {
     style: styles[styleSelect.value] ?? streetOverview,
     marginMm: readMargin(),
     title: titleInput.value,
+    trimEdgeSnippets: trimCheckbox.checked,
   };
 }
 
@@ -83,6 +88,18 @@ function showRoads(roads: RoadLength[]): void {
     const li = document.createElement('li');
     li.textContent = `${r.name} — ${Math.round(r.lengthM)} m`;
     roadsEl.append(li);
+  }
+}
+
+/** Render the list of streets removed by trimming; hides its heading when none. */
+function showTrimmed(trimmed: TrimmedStreet[]): void {
+  trimmedHeading.hidden = trimmed.length === 0;
+  trimmedHeading.textContent = `Trimmed streets (${trimmed.length}):`;
+  trimmedEl.replaceChildren();
+  for (const t of trimmed) {
+    const li = document.createElement('li');
+    li.textContent = `${t.name ?? 'unnamed'} — ${Math.round(t.lengthM)} m`;
+    trimmedEl.append(li);
   }
 }
 
@@ -152,6 +169,7 @@ async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<
   const buttons = [generateBtn, testSheetsBtn];
   for (const b of buttons) b.disabled = true;
   showRoads([]);
+  showTrimmed([]);
   setStatus(busyMessage);
   try {
     await run();
@@ -181,9 +199,10 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, roads } = await generateMap({ ...params, translator });
+    const { pdf, strokeCount, roads, trimmed } = await generateMap({ ...params, translator });
     showPdf(pdf, 'tastmap.pdf');
     showRoads(roads);
+    showTrimmed(trimmed);
     const braille = translator ? 'liblouis German' : 'placeholder braille';
     setStatus(`Done — ${strokeCount} strokes (furniture braille: ${braille}). ${roads.length} named roads in this section:`);
   });

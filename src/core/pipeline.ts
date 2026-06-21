@@ -8,7 +8,7 @@ import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
 import { renderPdf, renderPdfPages } from './pdf/render';
 import { roadLengths, type RoadLength } from './roads';
-import { buildScene } from './scene/build';
+import { buildScene, type TrimmedStreet } from './scene/build';
 import { classify } from './style/classify';
 import type { StyleSpec } from './style/types';
 import { buildTestSheets } from './testsheets';
@@ -27,6 +27,8 @@ export interface MapParams {
   title?: string;
   /** Douglas–Peucker simplification tolerance (page mm); defaults applied in buildScene. */
   simplifyToleranceMm?: number;
+  /** Drop short, unconnected street snippets clipped off at the page edge. */
+  trimEdgeSnippets?: boolean;
   overpassEndpoint?: string;
   signal?: AbortSignal;
 }
@@ -41,6 +43,8 @@ export interface MapResult {
   strokeCount: number;
   /** Named roads in the section with their ground length (m), longest first. */
   roads: RoadLength[];
+  /** Streets dropped by edge-snippet trimming (empty when the option is off). */
+  trimmed: TrimmedStreet[];
 }
 
 /** Fetch slightly beyond the page so edge features aren't cut off mid-render. */
@@ -97,7 +101,10 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   // map clips to the area below it.
   const printable = printableRect(dim, margins);
   const clip: RectMm = { ...printable, minY: printable.minY + FURNITURE_BAND_MM };
-  const scene = buildScene(classified, projector, clip, { simplifyToleranceMm: params.simplifyToleranceMm });
+  const { scene, trimmed } = buildScene(classified, projector, clip, {
+    simplifyToleranceMm: params.simplifyToleranceMm,
+    trimEdgeSnippets: params.trimEdgeSnippets,
+  });
   const strokeCount = scene.primitives.length;
 
   // Keyed braille labels + a legend page are shelved pending a different
@@ -112,7 +119,7 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
 
   const roads = roadLengths(classified, projector, clip, params.scaleDenominator);
   const pdf = await renderPdf(scene);
-  return { pdf, featureCount: classified.length, strokeCount, roads };
+  return { pdf, featureCount: classified.length, strokeCount, roads, trimmed };
 }
 
 /** Render the full multi-page tactile test-sheet gallery — no network. */
