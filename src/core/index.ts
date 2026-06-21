@@ -20,4 +20,6 @@ export { buildTestSheets } from './testsheets';
 export { generateMap, coverageBBox, renderedBBox, renderCalibration, renderTestSheets } from './pipeline';
 export type { MapParams, MapResult, CoverageParams } from './pipeline';
 export { styles, streetOverview } from './style/defaultStyle';
+export { TACTILE_LINES, MIN_LINE_WIDTH_MM } from './style/vocabulary';
+export type { TactileLine, TactileLineName, LinePattern } from './style/vocabulary';
 export type { StyleSpec } from './style/types';
