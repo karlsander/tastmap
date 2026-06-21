@@ -6,6 +6,8 @@ produces a printable A4/A3 **PDF**. Printed onto swell paper (German
 *Schwellpapier*) and run through a fuser (*Schwellpapierkopierer*), the black
 content rises into a raised, touchable map.
 
+**Live:** <https://jkmap.ka.workers.dev>
+
 > Status: proof of concept. The first vertical slice works end to end — pick an
 > area → fetch roads → render a scaled, correctly-sized PDF. Textures, braille
 > labels, and the legend are scaffolded but not yet wired into the map.
@@ -86,6 +88,15 @@ The PoC calls the public Overpass API and OSM tile servers directly from the
 browser. Be gentle with them; for production we'll add caching and likely a
 self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 
+## Deployment
+
+Deployed as a static [Cloudflare Worker](https://jkmap.ka.workers.dev) via
+**Workers Builds** git integration: pushing to `main` triggers a build
+(Node 22, `npm run build`), and Cloudflare serves `dist/`. No GitHub Action and
+no `wrangler.toml` in the repo — Cloudflare's build pipeline injects its Vite
+plugin, which is why `vite.config.ts` keeps a (possibly empty) `plugins` array
+and `.nvmrc` pins Node 22.
+
 ## Roadmap
 
 - [x] Clip geometry to the printable area; apply margins.
@@ -107,7 +118,6 @@ self-hosted Overpass or PBF extract behind the `core/osm` abstraction.
 - [x] **liblouis** German braille (Vollschrift) in the browser, with the
       uncontracted placeholder as fallback. Note: liblouis is **GPL-3.0**, so the
       bundled app inherits GPL.
-- [ ] Scale bar, north indicator, title block (braille + ink).
 - [ ] Sidewalk / crossing detail style.
 
 ## Attribution
