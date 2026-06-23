@@ -114,7 +114,7 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   const { scene, trimmed, drawnLines } = buildScene(classified, projector, clip, {
     simplifyToleranceMm: params.simplifyToleranceMm,
     trimEdgeSnippets: params.trimEdgeSnippets,
-    collapseDualCarriageways: params.collapseDualCarriageways ?? true,
+    collapseDualCarriageways: params.collapseDualCarriageways ?? params.style.collapseDualCarriageways ?? true,
   });
   const strokeCount = scene.primitives.length;
 

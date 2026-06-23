@@ -51,4 +51,9 @@ export interface StyleSpec {
   sourceKeys: string[];
   /** Evaluated in order; the first matching rule wins. */
   rules: Rule[];
+  /** Collapse divided roads (two parallel oneway carriageways of the same name)
+   *  to a single centerline, then join same-named survivors end-to-end, so each
+   *  street reads as one stroke. Omitted/`true` keeps this on; set `false` to
+   *  draw each carriageway as its own line (a divided road as two fat lanes). */
+  collapseDualCarriageways?: boolean;
 }
