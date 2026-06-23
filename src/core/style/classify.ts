@@ -9,6 +9,12 @@ export interface ClassifiedFeature {
 export function matches(tags: Record<string, string>, where: TagMatch): boolean {
   for (const [key, cond] of Object.entries(where)) {
     const value = tags[key];
+    if (typeof cond === 'object' && !Array.isArray(cond)) {
+      // { not: ... } — an absent key, or any value outside the set, passes.
+      const excluded = Array.isArray(cond.not) ? cond.not : [cond.not];
+      if (value !== undefined && excluded.includes(value)) return false;
+      continue;
+    }
     if (value === undefined) return false;
     if (cond === true) continue;
     if (typeof cond === 'string') {

@@ -8,6 +8,8 @@ import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
 import { renderPdf, renderPdfPages } from './pdf/render';
 import { roadLengths, type RoadLength } from './roads';
+import { buildLegend, type LegendEntry } from './label/abbreviate';
+import { labelPrimitives, placeRoadLabels } from './label/place';
 import { buildScene, type TrimmedStreet } from './scene/build';
 import { classify } from './style/classify';
 import type { StyleSpec } from './style/types';
@@ -29,6 +31,8 @@ export interface MapParams {
   simplifyToleranceMm?: number;
   /** Drop short, unconnected street snippets clipped off at the page edge. */
   trimEdgeSnippets?: boolean;
+  /** Collapse divided roads to a single centerline (default true). */
+  collapseDualCarriageways?: boolean;
   overpassEndpoint?: string;
   signal?: AbortSignal;
 }
@@ -43,6 +47,12 @@ export interface MapResult {
   strokeCount: number;
   /** Named roads in the section with their ground length (m), longest first. */
   roads: RoadLength[];
+  /** 3-letter legend code per named road (same order as {@link roads}). */
+  legend: LegendEntry[];
+  /** Braille road codes actually placed on the map. */
+  labelsPlaced: number;
+  /** Coded roads whose braille label didn't fit (collision / off-page). */
+  labelsDropped: number;
   /** Streets dropped by edge-snippet trimming (empty when the option is off). */
   trimmed: TrimmedStreet[];
 }
@@ -101,9 +111,10 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   // map clips to the area below it.
   const printable = printableRect(dim, margins);
   const clip: RectMm = { ...printable, minY: printable.minY + FURNITURE_BAND_MM };
-  const { scene, trimmed } = buildScene(classified, projector, clip, {
+  const { scene, trimmed, drawnLines } = buildScene(classified, projector, clip, {
     simplifyToleranceMm: params.simplifyToleranceMm,
     trimEdgeSnippets: params.trimEdgeSnippets,
+    collapseDualCarriageways: params.collapseDualCarriageways ?? true,
   });
   const strokeCount = scene.primitives.length;
 
@@ -118,8 +129,25 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   );
 
   const roads = roadLengths(classified, projector, clip, params.scaleDenominator);
+  const legend = buildLegend(roads.map((r) => r.name));
+
+  // Place the 3-letter codes onto the map as braille with leader lines, then
+  // composite them on top of the map (knockout box, leader, anchor dot, braille).
+  const codeByName = new Map(legend.map((e) => [e.name, e.code]));
+  const { labels, dropped } = placeRoadLabels(drawnLines, clip, codeByName);
+  scene.primitives.push(...labelPrimitives(labels));
+
   const pdf = await renderPdf(scene);
-  return { pdf, featureCount: classified.length, strokeCount, roads, trimmed };
+  return {
+    pdf,
+    featureCount: classified.length,
+    strokeCount,
+    roads,
+    legend,
+    labelsPlaced: labels.length,
+    labelsDropped: dropped.length,
+    trimmed,
+  };
 }
 
 /** Render the full multi-page tactile test-sheet gallery — no network. */

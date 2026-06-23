@@ -9,6 +9,7 @@ import {
   type MapParams,
   type Orientation,
   type PaperSize,
+  type LegendEntry,
   type RoadLength,
   type Translator,
   type TrimmedStreet,
@@ -16,8 +17,10 @@ import {
 import { geocode } from './geocode';
 import { createPicker } from './picker';
 
-// Marburg — fitting home of the braille standard we target.
-const DEFAULT_CENTER = { lng: 8.7665, lat: 50.8021 };
+// Winsviertel, Prenzlauer Berg — our standing test area: dense, heavily
+// micro-mapped Berlin grid that exercises the symbology hard. Tuned so the
+// A4@1:5000 footprint frames the whole Kiez — a known-good working area.
+const DEFAULT_CENTER = { lng: 13.427263, lat: 52.534571 };
 
 const el = <T extends HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -72,7 +75,7 @@ function readParams(): MapParams {
     orientation: orientation(),
     style: styles[styleSelect.value] ?? streetOverview,
     marginMm: readMargin(),
-    title: titleInput.value,
+    title: titleInput.value.trim() || 'Winsviertel',
     trimEdgeSnippets: trimCheckbox.checked,
   };
 }
@@ -81,12 +84,15 @@ function setStatus(message: string): void {
   statusEl.textContent = message;
 }
 
-/** Render the per-road length list (longest first); clears when empty. */
-function showRoads(roads: RoadLength[]): void {
+/** Render the combined legend + length list (code — name — length), longest
+ *  first; clears when empty. */
+function showRoads(roads: RoadLength[], legend: LegendEntry[]): void {
+  const codeByName = new Map(legend.map((e) => [e.name, e.code]));
   roadsEl.replaceChildren();
   for (const r of roads) {
+    const code = codeByName.get(r.name);
     const li = document.createElement('li');
-    li.textContent = `${r.name} — ${Math.round(r.lengthM)} m`;
+    li.textContent = `${code ? `${code} — ` : ''}${r.name} — ${Math.round(r.lengthM)} m`;
     roadsEl.append(li);
   }
 }
@@ -168,7 +174,7 @@ function showPdf(pdf: Uint8Array, downloadName: string): void {
 async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<void> {
   const buttons = [generateBtn, testSheetsBtn];
   for (const b of buttons) b.disabled = true;
-  showRoads([]);
+  showRoads([], []);
   showTrimmed([]);
   setStatus(busyMessage);
   try {
@@ -199,12 +205,18 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, roads, trimmed } = await generateMap({ ...params, translator });
+    const { pdf, strokeCount, roads, legend, labelsPlaced, labelsDropped, trimmed } = await generateMap({
+      ...params,
+      translator,
+    });
     showPdf(pdf, 'tastmap.pdf');
-    showRoads(roads);
+    showRoads(roads, legend);
     showTrimmed(trimmed);
     const braille = translator ? 'liblouis German' : 'placeholder braille';
-    setStatus(`Done — ${strokeCount} strokes (furniture braille: ${braille}). ${roads.length} named roads in this section:`);
+    const labelNote = `${labelsPlaced} braille codes placed${labelsDropped ? `, ${labelsDropped} didn't fit` : ''}`;
+    setStatus(
+      `Done — ${strokeCount} strokes (furniture braille: ${braille}). ${labelNote}. ${roads.length} named roads in this section:`,
+    );
   });
 });
 

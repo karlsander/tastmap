@@ -26,6 +26,13 @@ describe('matches', () => {
     expect(matches({ area: 'yes' }, { area: 'yes' })).toBe(true);
     expect(matches({ area: 'no' }, { area: 'yes' })).toBe(false);
   });
+
+  it('matches { not } when the key is absent or outside the excluded set', () => {
+    expect(matches({ highway: 'footway' }, { footway: { not: 'sidewalk' } })).toBe(true); // absent
+    expect(matches({ footway: 'crossing' }, { footway: { not: ['sidewalk', 'crossing'] } })).toBe(false);
+    expect(matches({ footway: 'sidewalk' }, { footway: { not: 'sidewalk' } })).toBe(false);
+    expect(matches({ footway: 'link' }, { footway: { not: ['sidewalk', 'crossing'] } })).toBe(true);
+  });
 });
 
 describe('classify', () => {
@@ -38,5 +45,29 @@ describe('classify', () => {
   it('returns features in ascending z order', () => {
     const res = classify([line({ highway: 'footway' }), line({ highway: 'primary' })], streetOverview);
     expect(res.map((r) => r.rule.id)).toEqual(['paths', 'major-roads']);
+  });
+
+  it('drops cycle ways and service lanes (clutter for a blind reader)', () => {
+    const res = classify([line({ highway: 'cycleway' }), line({ highway: 'service' })], streetOverview);
+    expect(res).toHaveLength(0);
+  });
+
+  it('keeps standalone footpaths but drops sidewalks and crossings', () => {
+    const res = classify(
+      [
+        line({ highway: 'footway' }), // park path → paths
+        line({ highway: 'path' }), // → paths
+        line({ highway: 'footway', footway: 'sidewalk' }), // dropped
+        line({ highway: 'footway', footway: 'crossing' }), // dropped
+      ],
+      streetOverview,
+    );
+    expect(res.map((r) => r.rule.id)).toEqual(['paths', 'paths']);
+  });
+
+  it('renders footpaths as a thin solid line (no dash)', () => {
+    const [res] = classify([line({ highway: 'path' })], streetOverview);
+    expect(res.rule.symbol).toMatchObject({ type: 'line', widthMm: 0.3 });
+    expect((res.rule.symbol as { dashMm?: number[] }).dashMm).toBeUndefined();
   });
 });

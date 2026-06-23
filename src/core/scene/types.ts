@@ -14,6 +14,11 @@ export interface PathPrimitive {
    *  texture, not a solid — solids are here mainly to test how large black
    *  regions behave on the fuser. A path may be both filled and stroked. */
   fill?: boolean;
+  /** Fill the (closed) path solid WHITE — an opaque knockout that clears (keeps
+   *  flat) whatever is beneath, e.g. the map behind a label box. Drawn before
+   *  the path's own stroke, so a white box with a thin black border is one
+   *  primitive: `{ closed, fillWhite: true, stroke }`. */
+  fillWhite?: boolean;
 }
 
 /** A single raised braille dot. */

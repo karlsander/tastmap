@@ -3,6 +3,7 @@ import { groundMeters, type Projector } from '../geo/projection';
 import { simplify } from '../geo/simplify';
 import type { PointMm, RectMm } from '../geo/types';
 import type { ClassifiedFeature } from '../style/classify';
+import { collapseDualCarriageways, type Way } from './dualCarriageway';
 import type { PathPrimitive, Primitive, Scene } from './types';
 
 /** Default Douglas–Peucker tolerance (page mm) — well under tactile resolution,
@@ -21,6 +22,14 @@ export interface BuildOptions {
   /** Drop short street snippets that hug the page edge and connect to nothing
    *  else on the page — usually streets clipped off at the boundary. */
   trimEdgeSnippets?: boolean;
+  /** Collapse divided roads (two oneway carriageways of the same name running
+   *  close and parallel) to a single centerline. See {@link collapseDualCarriageways}. */
+  collapseDualCarriageways?: boolean;
+}
+
+/** OSM `oneway` values that mean the way carries one direction of traffic. */
+function isOneway(value: string | undefined): boolean {
+  return value === 'yes' || value === 'true' || value === '1' || value === '-1';
 }
 
 /** A street dropped by {@link BuildOptions.trimEdgeSnippets}. */
@@ -31,10 +40,19 @@ export interface TrimmedStreet {
   lengthM: number;
 }
 
+/** A polyline exactly as drawn (merged, clipped, simplified) — what the labeller
+ *  must anchor to, so dots land on the rendered line, not the raw OSM geometry. */
+export interface DrawnLine {
+  name?: string;
+  points: PointMm[];
+}
+
 export interface BuildResult {
   scene: Scene;
   /** Streets removed by edge-snippet trimming, longest first (empty otherwise). */
   trimmed: TrimmedStreet[];
+  /** Every stroked line as drawn, in page mm (for label placement). */
+  drawnLines: DrawnLine[];
 }
 
 function pathLengthMm(points: PointMm[]): number {
@@ -92,16 +110,30 @@ export function buildScene(
   const tol = opts.simplifyToleranceMm ?? DEFAULT_SIMPLIFY_MM;
   const trim = opts.trimEdgeSnippets ?? false;
 
-  // Project + clip every line feature into parts (kept pre-simplify so junction
-  // nodes survive for the connectivity test below).
-  const parts: LinePart[] = [];
+  // Project every line feature to a full page-mm polyline, tagged with what the
+  // dual-carriageway merge needs (name, oneway). Done before clipping so the
+  // merge sees whole carriageways, not page-edge fragments.
+  const ways: Way[] = [];
   for (const { feature, rule } of classified) {
     if (rule.symbol.type !== 'line') continue; // areas: TODO
-    const points = feature.geometry.coordinates.map((c) => proj.toPage(c));
-    const isPolygon = feature.geometry.type === 'Polygon';
-    const stroke = { widthMm: rule.symbol.widthMm, dashMm: rule.symbol.dashMm };
-    for (const part of clipPolylineToRect(points, clip, isPolygon)) {
-      parts.push({ featureId: feature.id, name: feature.tags.name, points: part, stroke, minLengthMm: rule.symbol.minLengthMm });
+    ways.push({
+      featureId: feature.id,
+      name: feature.tags.name,
+      oneway: isOneway(feature.tags.oneway),
+      points: feature.geometry.coordinates.map((c) => proj.toPage(c)),
+      isPolygon: feature.geometry.type === 'Polygon',
+      stroke: { widthMm: rule.symbol.widthMm, dashMm: rule.symbol.dashMm },
+      minLengthMm: rule.symbol.minLengthMm,
+    });
+  }
+  const merged = opts.collapseDualCarriageways ? collapseDualCarriageways(ways) : ways;
+
+  // Clip into parts (kept pre-simplify so junction nodes survive for the
+  // connectivity test below).
+  const parts: LinePart[] = [];
+  for (const w of merged) {
+    for (const part of clipPolylineToRect(w.points, clip, w.isPolygon)) {
+      parts.push({ featureId: w.featureId, name: w.name, points: part, stroke: w.stroke, minLengthMm: w.minLengthMm });
     }
   }
 
@@ -129,6 +161,7 @@ export function buildScene(
     !connectsToOtherStreet(part);
 
   const primitives: Primitive[] = [];
+  const drawnLines: DrawnLine[] = [];
   const trimmed: TrimmedStreet[] = [];
   for (const part of parts) {
     if (trim && isEdgeSnippet(part)) {
@@ -139,8 +172,9 @@ export function buildScene(
     if (part.minLengthMm && pathLengthMm(simplified) < part.minLengthMm) continue;
     const path: PathPrimitive = { kind: 'path', points: simplified, closed: false, stroke: part.stroke };
     primitives.push(path);
+    drawnLines.push({ name: part.name, points: simplified });
   }
   trimmed.sort((a, b) => b.lengthM - a.lengthM);
   const scene: Scene = { widthMm: proj.page.widthMm, heightMm: proj.page.heightMm, primitives };
-  return { scene, trimmed };
+  return { scene, trimmed, drawnLines };
 }

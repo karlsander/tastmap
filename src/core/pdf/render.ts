@@ -18,6 +18,7 @@ import type { DotPrimitive, PathPrimitive, Scene, TextPrimitive } from '../scene
 const MM_TO_PT = 72 / 25.4;
 const toPt = (mm: number): number => mm * MM_TO_PT;
 const BLACK = rgb(0, 0, 0);
+const WHITE = rgb(1, 1, 1);
 const DEFAULT_STROKE_MM = 0.3;
 
 type Transform = (n: number) => number;
@@ -61,10 +62,10 @@ function drawPath(page: PDFPage, prim: PathPrimitive, X: Transform, Y: Transform
   const pts = prim.points;
   if (pts.length < 2) return;
 
-  if (prim.fill && prim.closed && pts.length >= 3) {
+  if ((prim.fill || prim.fillWhite) && prim.closed && pts.length >= 3) {
     page.pushOperators(
       pushGraphicsState(),
-      setFillingColor(BLACK),
+      setFillingColor(prim.fillWhite ? WHITE : BLACK),
       moveTo(X(pts[0].x), Y(pts[0].y)),
       ...pts.slice(1).map((pt) => lineTo(X(pt.x), Y(pt.y))),
       closePath(),

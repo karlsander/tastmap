@@ -48,7 +48,7 @@
           <div class="row">
             <span class="field">
               <label for="scale">Scale 1:</label>
-              <input id="scale" name="scale" type="number" min="100" step="100" value="1500" />
+              <input id="scale" name="scale" type="number" min="100" step="100" value="5000" />
             </span>
           </div>
           <div id="picker" role="application" aria-label="Map location picker" aria-describedby="picker-help"></div>
@@ -63,7 +63,7 @@
             </span>
             <span class="field grow">
               <label for="title">Title (optional)</label>
-              <input id="title" name="title" type="text" autocomplete="off" placeholder="e.g. Marburg Altstadt" />
+              <input id="title" name="title" type="text" autocomplete="off" placeholder="Winsviertel" />
             </span>
           </div>
           <div class="checkbox">
@@ -83,7 +83,7 @@
       <section aria-labelledby="result-heading">
         <h2 id="result-heading">Result</h2>
         <p id="status" role="status" aria-live="polite"></p>
-        <ul id="roads" class="roads" aria-label="Roads in this section"></ul>
+        <ul id="roads" class="roads" aria-label="Roads in this section (code, name, length)"></ul>
         <p id="trimmed-heading" class="list-heading" hidden>Trimmed streets</p>
         <ul id="trimmed" class="roads" aria-label="Trimmed streets"></ul>
         <p><a id="download" download="tastmap.pdf" hidden>Download PDF</a></p>
