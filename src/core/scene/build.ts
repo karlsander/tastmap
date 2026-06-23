@@ -88,9 +88,12 @@ interface LinePart {
  * the printable rectangle `clip` (the page inset by its margins).
  *
  * Generalization: each clipped part is Douglas–Peucker simplified (drops
- * sub-tactile wiggle); minLengthMm is then enforced per part, so a stroke that
- * survives clipping only as a sub-threshold sliver is dropped (it would not be
- * feel-able anyway).
+ * sub-tactile wiggle); a part shorter than its rule's minLengthMm is dropped
+ * only when it is *isolated* (shares no node with another street). A sub-tactile
+ * stub clipped off at the boundary still goes, but a short fragment inside a
+ * continuous road connects to its neighbours at junctions and stays — otherwise
+ * the per-part filter would punch gaps into streets (dense OSM splits a road
+ * into many ways, some only a millimetre or two long on the page).
  *
  * With {@link BuildOptions.trimEdgeSnippets}, a street part is also dropped when
  * all of these hold: it touches the page edge, it is shorter than a third of the
@@ -138,15 +141,15 @@ export function buildScene(
   }
 
   // Connectivity index: vertex → the set of features that own a node there.
+  // Built unconditionally — both edge-snippet trimming and the connectivity-aware
+  // minLength drop below use it to tell a real junction from a dead-end sliver.
   const ownersByVertex = new Map<string, Set<string>>();
-  if (trim) {
-    for (const part of parts) {
-      for (const p of part.points) {
-        const key = vertexKey(p);
-        let owners = ownersByVertex.get(key);
-        if (!owners) ownersByVertex.set(key, (owners = new Set()));
-        owners.add(part.featureId);
-      }
+  for (const part of parts) {
+    for (const p of part.points) {
+      const key = vertexKey(p);
+      let owners = ownersByVertex.get(key);
+      if (!owners) ownersByVertex.set(key, (owners = new Set()));
+      owners.add(part.featureId);
     }
   }
   const maxSnippetLenMm = proj.page.widthMm / 3;
@@ -169,7 +172,14 @@ export function buildScene(
       continue;
     }
     const simplified = simplify(part.points, tol);
-    if (part.minLengthMm && pathLengthMm(simplified) < part.minLengthMm) continue;
+    // Drop a sub-threshold part only when it is an *isolated* sliver — one that
+    // shares no node with another street. A short fragment in the middle of a
+    // continuous road connects to its neighbours at a junction, so it stays;
+    // dropping it would break the street. A clipped-off stub that leads nowhere
+    // has no such neighbour and is dropped, as before.
+    if (part.minLengthMm && pathLengthMm(simplified) < part.minLengthMm && !connectsToOtherStreet(part)) {
+      continue;
+    }
     const path: PathPrimitive = { kind: 'path', points: simplified, closed: false, stroke: part.stroke };
     primitives.push(path);
     drawnLines.push({ name: part.name, points: simplified });

@@ -76,3 +76,38 @@ describe('buildScene trimEdgeSnippets', () => {
     expect(buildScene(ALL, proj, CLIP).trimmed).toEqual([]);
   });
 });
+
+describe('buildScene minLength (connectivity-aware)', () => {
+  // A rule with a 5 mm minimum, so sub-5 mm parts are candidates for dropping.
+  const RULE = { id: 'r', where: {}, z: 0, symbol: { type: 'line' as const, widthMm: 0.6, minLengthMm: 5 } };
+  const seg = (id: string, coords: [number, number][]): ClassifiedFeature => ({
+    feature: {
+      id,
+      tags: { highway: 'residential' },
+      geometry: { type: 'LineString', coordinates: coords.map(([lng, lat]) => ({ lng, lat })) },
+    },
+    rule: RULE,
+  });
+  const out = (cs: ClassifiedFeature[]): PathPrimitive[] =>
+    buildScene(cs, proj, CLIP).scene.primitives.filter((p): p is PathPrimitive => p.kind === 'path');
+
+  // One street split into three OSM ways; the middle one is only 3 mm but sits
+  // between two long pieces, sharing a junction node with each.
+  const A = seg('a', [[50, 10], [50, 60]]);
+  const BRIDGE = seg('b', [[50, 60], [50, 63]]); // 3 mm < 5 mm, interior
+  const C = seg('c', [[50, 63], [50, 90]]);
+  // A 3 mm fragment that touches nothing.
+  const ISOLATED = seg('iso', [[10, 10], [13, 10]]);
+
+  it('keeps a short fragment that bridges two pieces of the same street', () => {
+    const ps = out([A, BRIDGE, C]);
+    expect(ps).toHaveLength(3);
+    expect(startsAt(ps, 50, 60)).toBe(true); // the 3 mm bridge survives → no gap
+  });
+
+  it('drops a short fragment that connects to nothing', () => {
+    const ps = out([A, BRIDGE, C, ISOLATED]);
+    expect(ps).toHaveLength(3);
+    expect(startsAt(ps, 10, 10)).toBe(false); // the isolated sliver is gone
+  });
+});
