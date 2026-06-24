@@ -1,3 +1,5 @@
+import type { AreaFill } from './vocabulary';
+
 /** Negation: satisfied when the key is absent, or present with a value that is
  *  not in the excluded set. Lets a rule say "footways, but not sidewalks". */
 export interface TagNot {
@@ -26,11 +28,15 @@ export interface LineSymbology {
   minLengthMm?: number;
 }
 
-/** Placeholder for upcoming area treatments — tactile areas need *textures*,
- *  never solid black fills (everything black would swell into one plateau). */
+/** Area fill for a polygon feature (park, water…). Tactile areas need *textures*,
+ *  never solid black fills (everything black would swell into one plateau), so
+ *  the surface is conveyed by a dot grid or hatching from the vocabulary. */
 export interface AreaSymbology {
   type: 'area';
-  texture: 'none' | 'hatch' | 'dots';
+  /** Tactile fill pattern (dots / cross-hatch / hatch — see {@link AreaFill}). */
+  fill: AreaFill;
+  /** Outline stroke width (mm) for the polygon boundary; omit for no outline
+   *  (e.g. parks read fine from texture alone; water wants a bank line). */
   outlineMm?: number;
 }
 

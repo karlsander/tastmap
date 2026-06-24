@@ -1,9 +1,12 @@
 import type { Rule, StyleSpec } from './types';
-import { TACTILE_LINES } from './vocabulary';
+import { TACTILE_AREAS, TACTILE_LINES } from './vocabulary';
 
 const THICK = TACTILE_LINES.thick.pattern.widthMm; // 2.0 — major roads
 const NORMAL = TACTILE_LINES.normal.pattern.widthMm; // 0.8 — minor roads
 const THIN = TACTILE_LINES.thin.pattern.widthMm; // 0.3 — standalone footpaths
+
+/** OSM keys both styles fetch: the road network plus water area features. */
+const SOURCE_KEYS = ['highway', 'natural'];
 
 /**
  * The drivable street network, in two weight bands so they read as a hierarchy
@@ -64,6 +67,22 @@ const footpathRule: Rule = {
 };
 
 /**
+ * Area features, drawn beneath the road network. Water (rivers, lakes, basins)
+ * is shaded with a cross-hatch and a bank outline, so the shoreline is traceable
+ * and the surface reads as a filled area. Fill comes from the validated tactile
+ * vocabulary (see `./vocabulary`). (Park shading was tried and dropped — dotted
+ * parks read as noise here.)
+ */
+const areaRules: Rule[] = [
+  {
+    id: 'water',
+    where: { natural: 'water' },
+    z: 4,
+    symbol: { type: 'area', fill: TACTILE_AREAS.crosshatch.fill, outlineMm: 0.5 },
+  },
+];
+
+/**
  * "Street overview" — the first tactile style.
  *
  * Single-stroke: divided roads fold to one centerline and same-named survivors
@@ -73,8 +92,8 @@ const footpathRule: Rule = {
 export const streetOverview: StyleSpec = {
   id: 'street-overview',
   name: 'Street overview',
-  sourceKeys: ['highway'],
-  rules: [...roadRules, footpathRule],
+  sourceKeys: SOURCE_KEYS,
+  rules: [...areaRules, ...roadRules, footpathRule],
 };
 
 /**
@@ -88,8 +107,8 @@ export const streetOverview: StyleSpec = {
 export const standard: StyleSpec = {
   id: 'standard',
   name: 'Standard',
-  sourceKeys: ['highway'],
-  rules: roadRules,
+  sourceKeys: SOURCE_KEYS,
+  rules: [...areaRules, ...roadRules],
   collapseDualCarriageways: false,
 };
 

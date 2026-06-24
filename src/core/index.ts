@@ -6,7 +6,7 @@ export { crossHatchFill, dotFill, filledPolygon, filledRect, hatchFill, rectOutl
 export { arcPoints, beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './scene/lines';
 export { icon, ICON_KINDS } from './scene/icons';
 export type { IconKind } from './scene/icons';
-export { clipTextureToPolygon, clearTextureAroundLine, pointInPolygon, distPointToPolyline } from './scene/fill';
+export { clipTextureToPolygon, clipTextureToArea, clearTextureAroundLine, pointInPolygon, distPointToPolyline } from './scene/fill';
 export { renderPdf, renderPdfPages } from './pdf/render';
 export { basicTranslator } from './braille/translate';
 export type { Translator } from './braille/translate';

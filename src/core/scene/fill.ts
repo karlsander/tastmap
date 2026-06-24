@@ -77,6 +77,11 @@ export function clipTextureToPolygon(texture: Primitive[], poly: PointMm[]): Pri
   return filterTexture(texture, (p) => pointInPolygon(p, poly));
 }
 
+/** Keep texture inside `outer` but outside every hole — so islands stay flat. */
+export function clipTextureToArea(texture: Primitive[], outer: PointMm[], holes: PointMm[][] = []): Primitive[] {
+  return filterTexture(texture, (p) => pointInPolygon(p, outer) && !holes.some((h) => pointInPolygon(p, h)));
+}
+
 /** Remove the parts of `texture` within `clearMm` of `line` (a clear corridor). */
 export function clearTextureAroundLine(texture: Primitive[], line: PointMm[], clearMm: number): Primitive[] {
   return filterTexture(texture, (p) => distPointToPolyline(p, line) > clearMm);

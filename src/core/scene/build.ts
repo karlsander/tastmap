@@ -3,7 +3,11 @@ import { groundMeters, type Projector } from '../geo/projection';
 import { simplify } from '../geo/simplify';
 import type { PointMm, RectMm } from '../geo/types';
 import type { ClassifiedFeature } from '../style/classify';
+import type { AreaSymbology } from '../style/types';
+import type { AreaFill } from '../style/vocabulary';
 import { collapseDualCarriageways, type Way } from './dualCarriageway';
+import { clipTextureToArea } from './fill';
+import { crossHatchFill, dotFill, hatchFill } from './textures';
 import type { PathPrimitive, Primitive, Scene } from './types';
 
 /** Default Douglas–Peucker tolerance (page mm) — well under tactile resolution,
@@ -83,6 +87,43 @@ interface LinePart {
   minLengthMm?: number;
 }
 
+/** Generate a tactile fill pattern (dots / hatch) over an axis-aligned rect. */
+function fillTexture(fill: AreaFill, rect: RectMm): Primitive[] {
+  if (fill.kind === 'dots') return dotFill(rect, { spacingMm: fill.spacingMm, radiusMm: fill.radiusMm });
+  if (fill.kind === 'crosshatch')
+    return crossHatchFill(rect, { spacingMm: fill.spacingMm, angleDeg: fill.angleDeg, widthMm: fill.widthMm });
+  return hatchFill(rect, { spacingMm: fill.spacingMm, angleDeg: fill.angleDeg, widthMm: fill.widthMm });
+}
+
+/**
+ * Shade a polygon area: a texture clipped to the outer ring minus any holes
+ * (islands stay flat), plus an optional outline on every shore (outer + holes).
+ * The texture is generated only over the outer ring's on-page bounding box
+ * (clamped to `clip`) so off-page parts cost nothing; boundaries are clipped to
+ * the page. Returns [] when the area falls entirely outside the page.
+ */
+function buildArea(outer: PointMm[], holes: PointMm[][], symbol: AreaSymbology, clip: RectMm): Primitive[] {
+  const xs = outer.map((p) => p.x);
+  const ys = outer.map((p) => p.y);
+  const bbox: RectMm = {
+    minX: Math.max(clip.minX, Math.min(...xs)),
+    minY: Math.max(clip.minY, Math.min(...ys)),
+    maxX: Math.min(clip.maxX, Math.max(...xs)),
+    maxY: Math.min(clip.maxY, Math.max(...ys)),
+  };
+  if (bbox.maxX <= bbox.minX || bbox.maxY <= bbox.minY) return []; // off page
+  const out: Primitive[] = clipTextureToArea(fillTexture(symbol.fill, bbox), outer, holes);
+  if (symbol.outlineMm) {
+    // Rings already close (first point repeats), so clip them as open paths.
+    for (const ring of [outer, ...holes]) {
+      for (const part of clipPolylineToRect(ring, clip, false)) {
+        out.push({ kind: 'path', points: part, closed: false, stroke: { widthMm: symbol.outlineMm } });
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * Turn classified features into scene primitives in page millimetres, clipped to
  * the printable rectangle `clip` (the page inset by its margins).
@@ -100,9 +141,12 @@ interface LinePart {
  * page width, and it shares no node with any other street on the page — i.e. a
  * fragment clipped off at the boundary that leads nowhere.
  *
+ * Area features (polygons: parks, water) are shaded with a tactile texture and
+ * drawn *under* the line network. They are emitted in z order (classify sorts
+ * ascending), so a higher-z water area lays over a lower-z park.
+ *
  * TODO (next slices):
  *   - enforce minimum feature *separation* (displace crowded parallels)
- *   - area textures (hatch/dots) instead of solid fills
  */
 export function buildScene(
   classified: ClassifiedFeature[],
@@ -115,10 +159,19 @@ export function buildScene(
 
   // Project every line feature to a full page-mm polyline, tagged with what the
   // dual-carriageway merge needs (name, oneway). Done before clipping so the
-  // merge sees whole carriageways, not page-edge fragments.
+  // merge sees whole carriageways, not page-edge fragments. Area features are
+  // shaded here and collected to draw beneath the lines.
   const ways: Way[] = [];
+  const areaPrimitives: Primitive[] = [];
   for (const { feature, rule } of classified) {
-    if (rule.symbol.type !== 'line') continue; // areas: TODO
+    if (rule.symbol.type === 'area') {
+      if (feature.geometry.type === 'Polygon') {
+        const outer = feature.geometry.coordinates.map((c) => proj.toPage(c));
+        const holes = (feature.geometry.holes ?? []).map((h) => h.map((c) => proj.toPage(c)));
+        areaPrimitives.push(...buildArea(outer, holes, rule.symbol, clip));
+      }
+      continue;
+    }
     ways.push({
       featureId: feature.id,
       name: feature.tags.name,
@@ -163,7 +216,7 @@ export function buildScene(
     pathLengthMm(part.points) < maxSnippetLenMm &&
     !connectsToOtherStreet(part);
 
-  const primitives: Primitive[] = [];
+  const primitives: Primitive[] = [...areaPrimitives]; // areas first → beneath the lines
   const drawnLines: DrawnLine[] = [];
   const trimmed: TrimmedStreet[] = [];
   for (const part of parts) {

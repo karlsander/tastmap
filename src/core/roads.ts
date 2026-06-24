@@ -28,7 +28,8 @@ export function roadLengths(
   scaleDenominator: number,
 ): RoadLength[] {
   const mmByName = new Map<string, number>();
-  for (const { feature } of classified) {
+  for (const { feature, rule } of classified) {
+    if (rule.symbol.type !== 'line') continue; // areas (parks, water) aren't roads
     const name = feature.tags.name;
     if (!name) continue;
     const projected = feature.geometry.coordinates.map((c) => proj.toPage(c));

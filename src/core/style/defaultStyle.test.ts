@@ -16,10 +16,19 @@ describe('style registry', () => {
   });
 
   it('shares the road weight bands, but only Street overview adds footpaths', () => {
-    // Both classify the drivable network identically (major/minor); Street
-    // overview appends a thin footpath rule that Standard omits.
+    // Both classify the drivable network identically (major/minor) and shade
+    // water the same way; Street overview appends a thin footpath rule.
     const ruleIds = (s: typeof standard): string[] => s.rules.map((r) => r.id);
-    expect(ruleIds(standard)).toEqual(['major-roads', 'minor-roads']);
-    expect(ruleIds(streetOverview)).toEqual(['major-roads', 'minor-roads', 'paths']);
+    expect(ruleIds(standard)).toEqual(['water', 'major-roads', 'minor-roads']);
+    expect(ruleIds(streetOverview)).toEqual(['water', 'major-roads', 'minor-roads', 'paths']);
+  });
+
+  it('shades water as a textured area with a bank outline, no solid fill', () => {
+    const water = standard.rules.find((r) => r.id === 'water')?.symbol;
+    expect(water).toMatchObject({ type: 'area', fill: { kind: 'crosshatch' }, outlineMm: 0.5 });
+  });
+
+  it('fetches water keys alongside highways', () => {
+    expect(standard.sourceKeys).toEqual(['highway', 'natural']);
   });
 });

@@ -18,22 +18,43 @@ export interface OverpassWay {
   geometry?: { lat: number; lon: number }[];
 }
 
-export type OverpassElement = OverpassWay | { type: string; id: number };
+export interface OverpassRelationMember {
+  type: 'way' | 'node' | 'relation';
+  ref: number;
+  /** 'outer' / 'inner' for a multipolygon boundary. */
+  role: string;
+  /** Present for way members when the query uses `out geom;`. */
+  geometry?: { lat: number; lon: number }[];
+}
+
+export interface OverpassRelation {
+  type: 'relation';
+  id: number;
+  tags?: Record<string, string>;
+  members: OverpassRelationMember[];
+}
+
+export type OverpassElement = OverpassWay | OverpassRelation | { type: string; id: number };
 
 export interface OverpassResponse {
   elements: OverpassElement[];
 }
 
 /**
- * Build an Overpass QL query returning ways (with inline geometry) that carry
- * any of the given top-level tag keys within the bbox.
+ * Build an Overpass QL query returning, for each tag key within the bbox, both
+ * ways and multipolygon relations (with inline geometry).
  *
- * `out geom;` inlines node coordinates onto each way, so we never resolve node
- * references ourselves. Relations (multipolygons) are out of scope for now.
+ * Ways carry most features. Large areas — a river wrapping an island, a lake
+ * group — are mapped as multipolygon *relations* whose boundary is split across
+ * many member ways and which may have holes; we fetch those too. `out geom;`
+ * inlines node coordinates onto each way and onto every relation member, so we
+ * never resolve node references ourselves.
  */
 export function buildQuery(bbox: BBox, keys: string[], timeoutS = 30): string {
   const b = `(${bbox.minLat},${bbox.minLng},${bbox.maxLat},${bbox.maxLng})`;
-  const clauses = keys.map((k) => `  way["${k}"]${b};`).join('\n');
+  const clauses = keys
+    .flatMap((k) => [`  way["${k}"]${b};`, `  relation["${k}"]["type"="multipolygon"]${b};`])
+    .join('\n');
   return `[out:json][timeout:${timeoutS}];\n(\n${clauses}\n);\nout geom;`;
 }
 
