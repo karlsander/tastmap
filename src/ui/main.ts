@@ -9,6 +9,7 @@ import {
   type MapParams,
   type Orientation,
   type PaperSize,
+  type LabelStyle,
   type LegendEntry,
   type RoadLength,
   type Translator,
@@ -37,6 +38,7 @@ const titleInput = el<HTMLInputElement>('title');
 const paperSelect = el<HTMLSelectElement>('paper');
 const orientationSelect = el<HTMLSelectElement>('orientation');
 const styleSelect = el<HTMLSelectElement>('style');
+const labelStyleSelect = el<HTMLSelectElement>('label-style');
 const trimCheckbox = el<HTMLInputElement>('trim');
 const statusEl = el<HTMLParagraphElement>('status');
 const roadsEl = el<HTMLUListElement>('roads');
@@ -74,6 +76,7 @@ function readParams(): MapParams {
     paper: paperSelect.value as PaperSize,
     orientation: orientation(),
     style: styles[styleSelect.value] ?? streetOverview,
+    labelStyle: labelStyleSelect.value as LabelStyle,
     marginMm: readMargin(),
     title: titleInput.value.trim() || 'Winsviertel',
     trimEdgeSnippets: trimCheckbox.checked,
@@ -85,7 +88,8 @@ function setStatus(message: string): void {
 }
 
 /** Render the combined legend + length list (code — name — length), longest
- *  first; clears when empty. */
+ *  first; clears when empty. The code prefix is the label legend — the on-paper
+ *  map carries the codes/badges, so this list is where the mapping lives. */
 function showRoads(roads: RoadLength[], legend: LegendEntry[]): void {
   const codeByName = new Map(legend.map((e) => [e.name, e.code]));
   roadsEl.replaceChildren();
@@ -205,7 +209,7 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, roads, legend, labelsPlaced, labelsDropped, trimmed } = await generateMap({
+    const { pdf, strokeCount, roads, labelStyle, legend, labelsPlaced, labelsDropped, trimmed } = await generateMap({
       ...params,
       translator,
     });
@@ -213,7 +217,11 @@ form.addEventListener('submit', (e) => {
     showRoads(roads, legend);
     showTrimmed(trimmed);
     const braille = translator ? 'liblouis German' : 'placeholder braille';
-    const labelNote = `${labelsPlaced} braille codes placed${labelsDropped ? `, ${labelsDropped} didn't fit` : ''}`;
+    const placedNoun = labelStyle === 'index' ? 'index badges' : 'braille codes';
+    const labelNote =
+      labelStyle === 'none'
+        ? 'No street labels'
+        : `${labelsPlaced} ${placedNoun} placed${labelsDropped ? `, ${labelsDropped} didn't fit` : ''}`;
     setStatus(
       `Done — ${strokeCount} strokes (furniture braille: ${braille}). ${labelNote}. ${roads.length} named roads in this section:`,
     );

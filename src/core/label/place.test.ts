@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PointMm, RectMm } from '../geo/types';
 import type { DrawnLine } from '../scene/build';
-import { placeRoadLabels } from './place';
+import type { PathPrimitive } from '../scene/types';
+import { badgePrimitives, placeRoadBadges, placeRoadLabels } from './place';
 
 const CLIP: RectMm = { minX: 0, minY: 0, maxX: 120, maxY: 120 };
 const line = (name: string | undefined, pts: [number, number][]): DrawnLine => ({
@@ -75,5 +76,77 @@ describe('placeRoadLabels', () => {
     const { labels, dropped } = placeRoadLabels(lines, CLIP, new Map([['Main Straße', 'MNS']]));
     expect(labels.map((l) => l.name)).toEqual(['Main Straße']);
     expect(dropped).toEqual([]);
+  });
+});
+
+const within = (b: RectMm, clip: RectMm): boolean =>
+  b.minX >= clip.minX - 1e-6 && b.maxX <= clip.maxX + 1e-6 && b.minY >= clip.minY - 1e-6 && b.maxY <= clip.maxY + 1e-6;
+
+describe('placeRoadBadges', () => {
+  it('puts an upright badge centred on a clear stretch of the drawn road', () => {
+    const lines = [line('Greifswalder Straße', [[60, 5], [60, 115]])];
+    const { badges, dropped } = placeRoadBadges(lines, CLIP, new Map([['Greifswalder Straße', [1, 2]]]));
+
+    expect(dropped).toEqual([]);
+    expect(badges).toHaveLength(1);
+    const b = badges[0];
+    // The badge sits on the road, and its outline is centred on that anchor.
+    expect(distToPolyline(b.anchor, lines[0].points)).toBeLessThan(1e-6);
+    expect((b.rect.minX + b.rect.maxX) / 2).toBeCloseTo(b.anchor.x, 6);
+    expect((b.rect.minY + b.rect.maxY) / 2).toBeCloseTo(b.anchor.y, 6);
+    expect(within(b.rect, CLIP)).toBe(true);
+    // One braille cell ([1,2] = two dots), each dot inside the outline.
+    expect(b.dots).toHaveLength(2);
+    for (const d of b.dots) {
+      expect(d.center.x).toBeGreaterThan(b.rect.minX);
+      expect(d.center.x).toBeLessThan(b.rect.maxX);
+      expect(d.center.y).toBeGreaterThan(b.rect.minY);
+      expect(d.center.y).toBeLessThan(b.rect.maxY);
+    }
+  });
+
+  it('renders each badge as a white-knockout rounded rect that breaks the line', () => {
+    const lines = [line('Greifswalder Straße', [[60, 5], [60, 115]])];
+    const { badges } = placeRoadBadges(lines, CLIP, new Map([['Greifswalder Straße', [1]]]));
+    const prims = badgePrimitives(badges);
+    const boxes = prims.filter((p): p is PathPrimitive => p.kind === 'path');
+    const dots = prims.filter((p) => p.kind === 'dot');
+    expect(boxes).toHaveLength(1);
+    expect(dots).toHaveLength(1); // cell [1] = one dot
+    const box = boxes[0];
+    expect(box.closed).toBe(true);
+    expect(box.fillWhite).toBe(true); // severs the road beneath + clears texture
+    expect(box.stroke?.widthMm).toBeGreaterThan(0); // thin enclosing outline
+  });
+
+  it('places the longest road first and never overlaps two badges', () => {
+    const lines = [
+      line('Short Weg', [[40, 50], [40, 70]]),
+      line('Long Straße', [[80, 5], [80, 115]]),
+    ];
+    const { badges, dropped } = placeRoadBadges(
+      lines,
+      CLIP,
+      new Map([
+        ['Short Weg', [1]],
+        ['Long Straße', [1, 2]],
+      ]),
+    );
+    expect(dropped).toEqual([]);
+    expect(badges.map((b) => b.name)).toEqual(['Long Straße', 'Short Weg']); // prominence order
+    // The two footprints don't overlap.
+    const [a, b] = badges;
+    const overlap = !(a.rect.maxX < b.rect.minX || b.rect.maxX < a.rect.minX || a.rect.maxY < b.rect.minY || b.rect.maxY < a.rect.minY);
+    expect(overlap).toBe(false);
+  });
+
+  it('keeps the badge off corners and intersections', () => {
+    const main = line('Main Straße', [[10, 60], [60, 60], [60, 110]]);
+    const cross = line('Cross Weg', [[60, 35], [60, 85]]);
+    const { badges } = placeRoadBadges([main, cross], CLIP, new Map([['Main Straße', [1]]]));
+    expect(badges).toHaveLength(1);
+    const a = badges[0].anchor;
+    expect(distToPolyline(a, main.points)).toBeLessThan(1e-6); // still on the road
+    expect(Math.hypot(a.x - 60, a.y - 60)).toBeGreaterThan(3.5); // off the corner / cross
   });
 });

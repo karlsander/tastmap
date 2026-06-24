@@ -1,7 +1,8 @@
 import { cellsWidthMm, layoutCells } from '../braille/dots';
 import { MARBURG_MEDIUM } from '../braille/spec';
-import { basicTranslator } from '../braille/translate';
+import { basicTranslator, type BrailleCell } from '../braille/translate';
 import type { PointMm, RectMm } from '../geo/types';
+import { arcPoints } from '../scene/lines';
 import type { DrawnLine } from '../scene/build';
 import type { DotPrimitive, Primitive } from '../scene/types';
 
@@ -423,4 +424,175 @@ export function labelPrimitives(labels: RoadLabel[], opts: RoadLabelOptions = {}
   ]);
   const braille: Primitive[] = labels.flatMap((l) => l.dots);
   return [...knockouts, ...connectors, ...braille];
+}
+
+/* ------------------------------------------------------------------------- *
+ *  Single Character Index badges
+ *
+ *  An alternative to the leader-line acronym labels: drop a small rounded-rect
+ *  badge holding ONE braille cell directly onto a clear stretch of the road,
+ *  breaking the line at that point. The badge's white fill knocks out the road
+ *  (and any texture) beneath it; the thin outline encloses the single cell. The
+ *  cell is always upright — braille is orientation-sensitive — regardless of the
+ *  road's direction. Anchor selection reuses {@link anchorsForRoad}, so badges
+ *  land on the same clear, straight, junction-free stretches the acronym labels
+ *  prefer; "least confusing" then also means: not overlapping another badge and
+ *  not straddling a second street.
+ * ------------------------------------------------------------------------- */
+
+export interface RoadBadge {
+  name: string;
+  cell: BrailleCell;
+  /** The rounded-rect outline bounds (also the collision/knockout footprint). */
+  rect: RectMm;
+  /** Centre of the badge — a point on the drawn road. */
+  anchor: PointMm;
+  dots: DotPrimitive[];
+}
+
+export interface RoadBadgeResult {
+  badges: RoadBadge[];
+  dropped: string[];
+}
+
+export interface RoadBadgeOptions {
+  strokeMm?: number;
+  /** Minimum clear gap between two badges, millimetres. */
+  gapMm?: number;
+  maxBadges?: number;
+  /** Padding between the braille cell's dot extent and the outline. */
+  padMm?: number;
+  /** Corner radius of the rounded rect. */
+  cornerMm?: number;
+  /** Reject (vs. tolerate) a badge that can only sit overlapping another. */
+  overlapHard?: boolean;
+}
+
+const BADGE_DEFAULTS = {
+  strokeMm: 0.3,
+  gapMm: 1.5,
+  maxBadges: 200,
+  padMm: 1.6,
+  cornerMm: 1.5,
+  overlapHard: true,
+};
+
+/** Outline points of a rounded rect (4 corner arcs joined by straight edges). */
+function roundedRectPoints(rect: RectMm, r: number): PointMm[] {
+  const w = rect.maxX - rect.minX;
+  const h = rect.maxY - rect.minY;
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  if (rr === 0) {
+    return [
+      { x: rect.minX, y: rect.minY },
+      { x: rect.maxX, y: rect.minY },
+      { x: rect.maxX, y: rect.maxY },
+      { x: rect.minX, y: rect.maxY },
+    ];
+  }
+  const n = 6;
+  return [
+    ...arcPoints(rect.minX + rr, rect.minY + rr, rr, 180, 270, n), // top-left
+    ...arcPoints(rect.maxX - rr, rect.minY + rr, rr, 270, 360, n), // top-right
+    ...arcPoints(rect.maxX - rr, rect.maxY - rr, rr, 0, 90, n), // bottom-right
+    ...arcPoints(rect.minX + rr, rect.maxY - rr, rr, 90, 180, n), // bottom-left
+  ];
+}
+
+/**
+ * Place one single-cell badge on each named road in `cellByName`, centred on a
+ * clear stretch of the *drawn* road. Most-prominent (longest) roads are placed
+ * first so they claim the best spots; a road is dropped if no centred badge fits
+ * on the page without overlapping an already-placed badge.
+ */
+export function placeRoadBadges(
+  lines: DrawnLine[],
+  clip: RectMm,
+  cellByName: Map<string, BrailleCell>,
+  opts: RoadBadgeOptions = {},
+): RoadBadgeResult {
+  const o = { ...BADGE_DEFAULTS, ...opts };
+  const pitch = MARBURG_MEDIUM.dotPitchMm;
+  const radius = MARBURG_MEDIUM.dotDiameterMm / 2;
+  // Half-extents of the badge rect: the cell's dot grid (pitch wide × 2·pitch
+  // tall) plus the dots' radius plus the inner padding, centred on the anchor.
+  const halfW = pitch / 2 + radius + o.padMm;
+  const halfH = pitch + radius + o.padMm;
+  const rectAt = (c: PointMm): RectMm => ({ minX: c.x - halfW, minY: c.y - halfH, maxX: c.x + halfW, maxY: c.y + halfH });
+
+  const segments: Segment[] = [];
+  const piecesByName = new Map<string, PointMm[][]>();
+  for (const ln of lines) {
+    for (let i = 1; i < ln.points.length; i++) segments.push({ a: ln.points[i - 1], b: ln.points[i], name: ln.name });
+    if (ln.name && cellByName.has(ln.name)) {
+      const list = piecesByName.get(ln.name);
+      if (list) list.push(ln.points);
+      else piecesByName.set(ln.name, [ln.points]);
+    }
+  }
+  const junctions = findJunctions(lines);
+  const order = [...piecesByName.keys()].sort(
+    (a, b) =>
+      Math.max(...(piecesByName.get(b) as PointMm[][]).map(totalLen)) -
+      Math.max(...(piecesByName.get(a) as PointMm[][]).map(totalLen)),
+  );
+
+  const badges: RoadBadge[] = [];
+  const dropped: string[] = [];
+
+  for (const name of order) {
+    if (badges.length >= o.maxBadges) {
+      dropped.push(name);
+      continue;
+    }
+    const cell = cellByName.get(name) as BrailleCell;
+    const anchors = anchorsForRoad(piecesByName.get(name) as PointMm[][], junctions);
+    if (anchors.length === 0) {
+      dropped.push(name);
+      continue;
+    }
+    const foreignSegs = segments.filter((s) => s.name !== name);
+
+    type Cand = { rect: RectMm; anchor: PointMm; overlaps: number; foreignHit: boolean };
+    const cands: Cand[] = [];
+    for (const a of anchors) {
+      const rect = rectAt(a.p);
+      if (!inside(rect, clip)) continue;
+      let overlaps = 0;
+      for (const b of badges) if (rectsOverlap(rect, b.rect, o.gapMm)) overlaps++;
+      const foreignHit = foreignSegs.some((s) => segIntersectsRect(s.a, s.b, rect));
+      cands.push({ rect, anchor: a.p, overlaps, foreignHit });
+    }
+    // anchors arrive best-clearance-first, so the first qualifying candidate is
+    // the clearest. Prefer no-overlap & single-street; then no-overlap; finally,
+    // when overlaps are tolerated, the clearest spot regardless.
+    const pick =
+      cands.find((c) => c.overlaps === 0 && !c.foreignHit) ??
+      cands.find((c) => c.overlaps === 0) ??
+      (o.overlapHard ? undefined : cands[0]);
+    if (!pick) {
+      dropped.push(name);
+      continue;
+    }
+    const dots = layoutCells([cell], { x: pick.anchor.x - pitch / 2, y: pick.anchor.y - pitch });
+    badges.push({ name, cell, rect: pick.rect, anchor: pick.anchor, dots });
+  }
+
+  return { badges, dropped };
+}
+
+export function badgePrimitives(badges: RoadBadge[], opts: RoadBadgeOptions = {}): Primitive[] {
+  const strokeMm = opts.strokeMm ?? BADGE_DEFAULTS.strokeMm;
+  const cornerMm = opts.cornerMm ?? BADGE_DEFAULTS.cornerMm;
+  // One primitive per badge: a white-knockout rounded rect (severs the road and
+  // clears texture under it) with a thin black outline. Dots drawn after, on top.
+  const boxes: Primitive[] = badges.map((b) => ({
+    kind: 'path',
+    points: roundedRectPoints(b.rect, cornerMm),
+    closed: true,
+    fillWhite: true,
+    stroke: { widthMm: strokeMm },
+  }));
+  const braille: Primitive[] = badges.flatMap((b) => b.dots);
+  return [...boxes, ...braille];
 }
