@@ -98,7 +98,13 @@ const WEIGHTS: LabelWeights = { clash: 60, leaderStreet: 90, leaderLabel: 250, a
 const MIN_LEADER_MM = 2.5;
 /** Cap on how far adaptive/breathe will float a label off its road. */
 const MAX_EXTRA_MM = 21;
-const KNOCK_MARGIN_MM = 0.6;
+/** White quiet zone knocked out around the braille box + connector on *every*
+ *  side — including the three sides that have no connector edge — so the
+ *  surrounding map texture (cross-hatch, road lines) never crowds the dots.
+ *  Must exceed the dot radius, since `layoutCells` puts the first dot's centre on
+ *  the box corner (dots poke ~one radius past the box on the top/left edge). A
+ *  couple of millimetres reads as a deliberate margin under the fingertip. */
+const KNOCK_MARGIN_MM = 2;
 
 // Anchor-quality thresholds (mm / deg).
 const SAMPLE_STEP_MM = 1.5;
