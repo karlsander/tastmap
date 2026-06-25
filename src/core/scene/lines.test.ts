@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PointMm } from '../geo/types';
-import { beadedPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './lines';
+import { beadedPath, ladderAlongPath, ladderPath, parallelPair, scatterFill, segment, wavyFill, wavyPath } from './lines';
 
 const at = (x: number, y: number): PointMm => ({ x, y });
 
@@ -48,6 +48,33 @@ describe('ladderPath', () => {
   it('adds two rails when rails are on', () => {
     const both = ladderPath(at(0, 0), at(10, 0), { tieLengthMm: 4, tieSpacingMm: 2, widthMm: 0.4, rails: true, railGapMm: 3 });
     expect(both).toHaveLength(7); // 2 rails + 5 ties
+  });
+});
+
+describe('ladderAlongPath', () => {
+  it('places ties every spacing along a straight polyline, perpendicular to it', () => {
+    const ties = ladderAlongPath([at(0, 0), at(10, 0)], { tieLengthMm: 4, tieSpacingMm: 2, widthMm: 0.5 });
+    expect(ties).toHaveLength(5); // ties centred at x = 1,3,5,7,9
+    // First tie spans the full tie length, perpendicular (vertical) to a horizontal track.
+    expect(ties[0].points[0]).toEqual(at(1, 2));
+    expect(ties[0].points[1]).toEqual(at(1, -2));
+    expect(ties.every((t) => t.stroke?.widthMm === 0.5)).toBe(true);
+  });
+
+  it('keeps spacing continuous across a bend (no reset at the vertex)', () => {
+    // An L of two 6 mm legs (total 12 mm); ties every 3 mm → centres at arc 1.5,
+    // 4.5, 7.5, 10.5 → two on each leg, none bunched at the corner.
+    const ties = ladderAlongPath([at(0, 0), at(6, 0), at(6, 6)], { tieLengthMm: 2, tieSpacingMm: 3, widthMm: 0.4 });
+    expect(ties).toHaveLength(4);
+    // The third tie (arc 7.5) is 1.5 mm up the vertical leg.
+    const mid = (t: (typeof ties)[number]) => ({ x: (t.points[0].x + t.points[1].x) / 2, y: (t.points[0].y + t.points[1].y) / 2 });
+    expect(mid(ties[2]).x).toBeCloseTo(6, 6);
+    expect(mid(ties[2]).y).toBeCloseTo(1.5, 6);
+  });
+
+  it('returns nothing for a degenerate path or non-positive spacing', () => {
+    expect(ladderAlongPath([at(0, 0)], { tieLengthMm: 2, tieSpacingMm: 2, widthMm: 0.4 })).toEqual([]);
+    expect(ladderAlongPath([at(0, 0), at(10, 0)], { tieLengthMm: 2, tieSpacingMm: 0, widthMm: 0.4 })).toEqual([]);
   });
 });
 

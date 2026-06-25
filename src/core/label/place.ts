@@ -3,7 +3,7 @@ import { MARBURG_MEDIUM } from '../braille/spec';
 import { basicTranslator, type BrailleCell } from '../braille/translate';
 import type { PointMm, RectMm } from '../geo/types';
 import { arcPoints } from '../scene/lines';
-import type { DrawnLine } from '../scene/build';
+import type { DrawnLine, PlacedPoi } from '../scene/build';
 import type { DotPrimitive, Primitive } from '../scene/types';
 
 /**
@@ -312,7 +312,9 @@ export function placeRoadLabels(
   const piecesByName = new Map<string, PointMm[][]>();
   for (const ln of lines) {
     for (let i = 1; i < ln.points.length; i++) segments.push({ a: ln.points[i - 1], b: ln.points[i], name: ln.name });
-    if (ln.name && codeByName.has(ln.name)) {
+    // A non-labelable line (rail) is still an obstacle (above) but never a label
+    // target — so it can't steal the anchor of a same-named street.
+    if (ln.name && ln.labelable !== false && codeByName.has(ln.name)) {
       const list = piecesByName.get(ln.name);
       if (list) list.push(ln.points);
       else piecesByName.set(ln.name, [ln.points]);
@@ -524,7 +526,9 @@ export function placeRoadBadges(
   const piecesByName = new Map<string, PointMm[][]>();
   for (const ln of lines) {
     for (let i = 1; i < ln.points.length; i++) segments.push({ a: ln.points[i - 1], b: ln.points[i], name: ln.name });
-    if (ln.name && cellByName.has(ln.name)) {
+    // A non-labelable line (rail) is still an obstacle (above) but never a badge
+    // target — so it can't steal the anchor of a same-named street.
+    if (ln.name && ln.labelable !== false && cellByName.has(ln.name)) {
       const list = piecesByName.get(ln.name);
       if (list) list.push(ln.points);
       else piecesByName.set(ln.name, [ln.points]);
@@ -595,4 +599,247 @@ export function badgePrimitives(badges: RoadBadge[], opts: RoadBadgeOptions = {}
   }));
   const braille: Primitive[] = badges.flatMap((b) => b.dots);
   return [...boxes, ...braille];
+}
+
+/* ------------------------------------------------------------------------- *
+ *  POI badges
+ *
+ *  A point of interest (a station, say) is marked by a badge dropped *on* its
+ *  location: a single bold, *sharp-cornered* box around an optional braille
+ *  label, drawn as a solid black box with a white box laid on top — a heavy
+ *  border band with a knocked-out (white) interior. The white clears the map
+ *  beneath (rail line, road, texture) and the black band's outer edge meets the
+ *  surrounding texture squarely, with no white ring around it. The square corners
+ *  + heavy outline (vs. the road badge's rounded hairline) are the POI signature
+ *  under the fingertip; the cells are always upright. The label content (a 3-cell
+ *  acronym, a single index cell, or nothing) is decided by the caller, so the
+ *  same badge serves every label style.
+ *
+ *  A big station is mapped in OSM as a cluster of nodes (one per platform /
+ *  operator); {@link mergePois} folds such a cluster into a single badge first,
+ *  so a major interchange reads as one place, not a pile of overlapping boxes.
+ * ------------------------------------------------------------------------- */
+
+/** A POI and the braille it should carry, handed to {@link placePoiBadges}. */
+export interface PoiInput {
+  name?: string;
+  /** Page-mm location to centre the badge on (the projected POI point). */
+  point: PointMm;
+  /** Human-readable legend code (empty when the POI carries no label). */
+  code: string;
+  /** Braille to show inside the badge — 0 cells (bare marker), 1 (index), or
+   *  several (acronym). */
+  cells: BrailleCell[];
+}
+
+export interface PoiBadge {
+  name?: string;
+  code: string;
+  cells: BrailleCell[];
+  /** The border band's *centerline* rect. The filled frame's outer (black) and
+   *  inner (white) edges sit ±`borderMm/2` from it; the white interior is the
+   *  knockout, so no white ring shows outside the band. */
+  border: RectMm;
+  /** The POI point the badge is centred on. */
+  anchor: PointMm;
+  dots: DotPrimitive[];
+}
+
+export interface PoiBadgeResult {
+  badges: PoiBadge[];
+  /** POIs whose badge fell (partly) off the page and were skipped. */
+  dropped: PoiInput[];
+}
+
+export interface PoiBadgeOptions {
+  /** Stroke width of the (single) border, mm — a bold line by default. */
+  borderMm?: number;
+  /** Clear white gap between the braille extent and the *inner* edge of the
+   *  border (so a thicker border doesn't eat into the cells' breathing room). */
+  padMm?: number;
+  /** Corner radius of the border; 0 = a sharp-cornered box. */
+  cornerMm?: number;
+}
+
+const POI_DEFAULTS = {
+  borderMm: 3, // a heavy 3 mm outline — unmistakable as a POI
+  padMm: 2.6, // doubled, so the thick border keeps clear of the cells
+  cornerMm: 0, // sharp box corners (distinct from the rounded road / index badge)
+};
+
+/** On-paper page distance below which two POIs are treated as the same place
+ *  (platform/entrance nodes of one big station) and merged. Scale-independent:
+ *  at any scale, nodes whose badges would pile up fold into one. */
+export const POI_MERGE_DIST_MM = 18;
+
+/** A station this close (page mm) to a drawn rail line is nudged exactly onto it,
+ *  so its badge sits on the track the reader is following. */
+export const POI_SNAP_MM = 6;
+
+export interface MergePoiOptions {
+  /** Cluster radius: POIs within this fuse into one (page mm). */
+  maxDistMm?: number;
+  /** Drawn rail lines to anchor stations onto. When given, a cluster's point is
+   *  the member nearest a line (not the centroid), snapped onto the line if it
+   *  lands within {@link snapMm}. */
+  lines?: PointMm[][];
+  /** Snap distance (page mm) — see {@link lines}. */
+  snapMm?: number;
+}
+
+/** Nearest point on any of `lines` to `p`, with that distance (∞ if no lines). */
+function nearestOnLines(p: PointMm, lines: PointMm[][]): { point: PointMm; dist: number } {
+  let best = p;
+  let bestD = Infinity;
+  for (const ln of lines) {
+    for (let i = 1; i < ln.length; i++) {
+      const q = nearestOnSegment(p, ln[i - 1], ln[i]);
+      const d = distp(p, q);
+      if (d < bestD) {
+        bestD = d;
+        best = q;
+      }
+    }
+  }
+  return { point: best, dist: bestD };
+}
+
+/**
+ * Fold duplicate / clustered POIs into one. OSM maps a large station as several
+ * nodes (one per platform / operator) and sometimes lists the same station
+ * twice; on the page these stack into a pile of overlapping badges. POIs are
+ * unioned (single-link) when within `maxDistMm` *or* sharing an exact name, each
+ * cluster collapsing to one point with the shortest member name (usually the
+ * bare station name, sans "(Ringbahn)" qualifier).
+ *
+ * The cluster's point is, when rail `lines` are supplied, the member sitting
+ * nearest a line — the truest anchor for a station — snapped exactly onto the
+ * line when it's all but on it already (within `snapMm`). Without lines it is the
+ * centroid.
+ */
+export function mergePois(pois: PlacedPoi[], opts: MergePoiOptions = {}): PlacedPoi[] {
+  const maxDistMm = opts.maxDistMm ?? POI_MERGE_DIST_MM;
+  const lines = opts.lines ?? [];
+  const snapMm = opts.snapMm ?? POI_SNAP_MM;
+
+  const parent = pois.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) i = parent[i] = parent[parent[i]];
+    return i;
+  };
+  for (let i = 0; i < pois.length; i++) {
+    for (let j = i + 1; j < pois.length; j++) {
+      const close = distp(pois[i].point, pois[j].point) <= maxDistMm;
+      const sameName = !!pois[i].name && pois[i].name === pois[j].name;
+      if (close || sameName) parent[find(i)] = find(j);
+    }
+  }
+  const clusters = new Map<number, number[]>();
+  pois.forEach((_, i) => {
+    const r = find(i);
+    (clusters.get(r) ?? clusters.set(r, []).get(r)!).push(i);
+  });
+  return [...clusters.values()].map((idxs) => {
+    const members = idxs.map((i) => pois[i]);
+    const names = members.map((m) => m.name).filter((n): n is string => !!n);
+    const name = names.length ? names.reduce((a, b) => (b.length < a.length ? b : a)) : undefined;
+
+    let point: PointMm;
+    if (lines.length) {
+      let best = members[0];
+      let near = nearestOnLines(members[0].point, lines);
+      for (const m of members) {
+        const s = nearestOnLines(m.point, lines);
+        if (s.dist < near.dist) {
+          near = s;
+          best = m;
+        }
+      }
+      point = near.dist <= snapMm ? near.point : best.point;
+    } else {
+      point = {
+        x: members.reduce((s, m) => s + m.point.x, 0) / members.length,
+        y: members.reduce((s, m) => s + m.point.y, 0) / members.length,
+      };
+    }
+    return { name, point };
+  });
+}
+
+/** The box border (stroke-centerline rect) of a POI badge holding `n` cells,
+ *  centred on `c`. `padMm` is the clear gap to the *inner* stroke edge, so the
+ *  centerline sits a further `borderMm/2` out. An empty badge (n = 0) is sized as
+ *  a single cell so it still reads. */
+function poiBadgeBorder(c: PointMm, n: number, o: Required<PoiBadgeOptions>): RectMm {
+  const pitch = MARBURG_MEDIUM.dotPitchMm;
+  const cellPitch = MARBURG_MEDIUM.cellPitchMm;
+  const radius = MARBURG_MEDIUM.dotDiameterMm / 2;
+  const cells = Math.max(n, 1);
+  const spanX = (cells - 1) * cellPitch + pitch; // dot-centre span (x)
+  const halfW = spanX / 2 + radius + o.padMm + o.borderMm / 2;
+  const halfH = pitch + radius + o.padMm + o.borderMm / 2; // dot-centre span (y) = 2·pitch
+  return { minX: c.x - halfW, minY: c.y - halfH, maxX: c.x + halfW, maxY: c.y + halfH };
+}
+
+/** Top-left dot origin that centres `n` cells on `c` (matches {@link poiBadgeBorder}). */
+function poiCellsOrigin(c: PointMm, n: number): PointMm {
+  const spanX = (n - 1) * MARBURG_MEDIUM.cellPitchMm + MARBURG_MEDIUM.dotPitchMm;
+  return { x: c.x - spanX / 2, y: c.y - MARBURG_MEDIUM.dotPitchMm };
+}
+
+/**
+ * Place a POI badge on each input point, centred on the POI. A badge whose full
+ * footprint (the bold stroke's outer edge) doesn't fit inside `clip` is dropped
+ * (a half-badge at the page edge would mislead). POIs are real fixed locations,
+ * so badges aren't nudged to avoid each other — feed inputs through
+ * {@link mergePois} first to fold stacked station nodes into one.
+ */
+export function placePoiBadges(pois: PoiInput[], clip: RectMm, opts: PoiBadgeOptions = {}): PoiBadgeResult {
+  const o: Required<PoiBadgeOptions> = { ...POI_DEFAULTS, ...opts };
+  const half = o.borderMm / 2;
+  const badges: PoiBadge[] = [];
+  const dropped: PoiInput[] = [];
+  for (const poi of pois) {
+    const n = poi.cells.length;
+    const border = poiBadgeBorder(poi.point, n, o);
+    // The stroke pokes half its width past the centerline; check that outer edge.
+    const footprint: RectMm = { minX: border.minX - half, minY: border.minY - half, maxX: border.maxX + half, maxY: border.maxY + half };
+    if (!inside(footprint, clip)) {
+      dropped.push(poi);
+      continue;
+    }
+    const dots = n ? layoutCells(poi.cells, poiCellsOrigin(poi.point, n)) : [];
+    badges.push({ name: poi.name, code: poi.code, cells: poi.cells, border, anchor: poi.point, dots });
+  }
+  return { badges, dropped };
+}
+
+export function poiBadgePrimitives(badges: PoiBadge[], opts: PoiBadgeOptions = {}): Primitive[] {
+  const o: Required<PoiBadgeOptions> = { ...POI_DEFAULTS, ...opts };
+  const half = o.borderMm / 2;
+  const grow = (r: RectMm, d: number): RectMm => ({ minX: r.minX - d, minY: r.minY - d, maxX: r.maxX + d, maxY: r.maxY + d });
+  // The frame is drawn as a solid black box with a white box laid on top, not as
+  // a stroked outline: filled rects give *true* sharp corners (a thick stroke
+  // rounds them at the joins), and the white box both clears the interior and
+  // leaves the border a clean band with no white ring outside it. `b.border` is
+  // the band's centerline, so the outer/inner boxes sit ±half the line width.
+  // Concentric corner radii when rounded; both sharp (0) when `cornerMm` is 0.
+  const outerR = o.cornerMm > 0 ? o.cornerMm + half : 0;
+  const innerR = o.cornerMm > 0 ? Math.max(0, o.cornerMm - half) : 0;
+  // All black boxes first, then the white interiors, then the dots — so a
+  // neighbour's interior can't punch a hole in another badge's frame.
+  const blacks: Primitive[] = badges.map((b) => ({
+    kind: 'path',
+    points: roundedRectPoints(grow(b.border, half), outerR),
+    closed: true,
+    fill: true,
+  }));
+  const whites: Primitive[] = badges.map((b) => ({
+    kind: 'path',
+    points: roundedRectPoints(grow(b.border, -half), innerR),
+    closed: true,
+    fillWhite: true,
+  }));
+  const braille: Primitive[] = badges.flatMap((b) => b.dots);
+  return [...blacks, ...whites, ...braille];
 }

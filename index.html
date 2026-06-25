@@ -64,8 +64,8 @@
             <span class="field">
               <label for="label-style">Street labels</label>
               <select id="label-style" name="label-style">
-                <option value="acronym" selected>3 Letter Acronym</option>
-                <option value="index">Single Character Index</option>
+                <option value="index" selected>Single Character Index</option>
+                <option value="acronym">3 Letter Acronym</option>
                 <option value="none">None</option>
               </select>
             </span>
@@ -92,6 +92,8 @@
         <h2 id="result-heading">Result</h2>
         <p id="status" role="status" aria-live="polite"></p>
         <ul id="roads" class="roads" aria-label="Roads in this section (code, name, length)"></ul>
+        <p id="stations-heading" class="list-heading" hidden>Stations</p>
+        <ul id="stations" class="roads" aria-label="Stations in this section (code, name)"></ul>
         <p id="trimmed-heading" class="list-heading" hidden>Trimmed streets</p>
         <ul id="trimmed" class="roads" aria-label="Trimmed streets"></ul>
         <p><a id="download" download="tastmap.pdf" hidden>Download PDF</a></p>

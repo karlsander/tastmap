@@ -29,6 +29,14 @@ describe('abbreviateName', () => {
       expect(abbreviateName(n)).toMatch(/^[A-Z]{3}$/);
     }
   });
+
+  it('drops punctuation so station qualifiers never leak into a code', () => {
+    // Parenthesised / slashed qualifiers are common on station names; the code
+    // must stay three letters, never "BO(" or similar.
+    for (const n of ['Berlin Ostkreuz (Stadtbahn)', 'Berlin Hbf (tief)', 'S+U Pankow']) {
+      expect(abbreviateName(n)).toMatch(/^[A-Z]{3}$/);
+    }
+  });
 });
 
 describe('buildLegend', () => {

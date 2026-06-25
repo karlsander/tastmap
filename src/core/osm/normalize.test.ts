@@ -54,6 +54,23 @@ describe('normalize', () => {
     expect(f.geometry.holes?.[0][0]).toEqual({ lng: 3, lat: 3 });
   });
 
+  it('turns a tagged node into a Point feature', () => {
+    const res = {
+      elements: [{ type: 'node', id: 5, tags: { railway: 'station', name: 'Hbf' }, lat: 52.5, lon: 13.4 }],
+    } as unknown as OverpassResponse;
+    const [f] = normalize(res);
+    expect(f.id).toBe('node/5');
+    expect(f.tags.name).toBe('Hbf');
+    expect(f.geometry).toEqual({ type: 'Point', coordinates: { lng: 13.4, lat: 52.5 } });
+  });
+
+  it('drops untagged nodes (incidental way vertices)', () => {
+    const res = {
+      elements: [{ type: 'node', id: 6, lat: 1, lon: 2 }],
+    } as unknown as OverpassResponse;
+    expect(normalize(res)).toHaveLength(0);
+  });
+
   it('reverses a tail-to-tail fragment when chaining a ring', () => {
     const res = {
       elements: [

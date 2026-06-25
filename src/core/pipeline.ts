@@ -2,16 +2,26 @@ import { basicTranslator, type BrailleCell, type Translator } from './braille/tr
 import { printableRect } from './geo/clip';
 import { DEFAULT_MARGIN_MM, getPageDimensions, getPrintableArea, uniformMargins } from './geo/paper';
 import { bboxFromCenter, groundMeters, makeProjector } from './geo/projection';
-import type { BBox, LngLat, Orientation, PaperSize, RectMm } from './geo/types';
+import type { BBox, LngLat, Orientation, PaperSize, PointMm, RectMm } from './geo/types';
 import { buildFurniture } from './furniture';
 import { fetchOverpass } from './osm/overpass';
 import { normalize } from './osm/normalize';
 import { renderPdf, renderPdfPages } from './pdf/render';
 import { roadLengths, type RoadLength } from './roads';
 import { buildLegend, type LegendEntry } from './label/abbreviate';
-import { badgePrimitives, labelPrimitives, placeRoadBadges, placeRoadLabels } from './label/place';
+import {
+  badgePrimitives,
+  labelPrimitives,
+  mergePois,
+  placePoiBadges,
+  placeRoadBadges,
+  placeRoadLabels,
+  poiBadgePrimitives,
+  type PoiInput,
+} from './label/place';
 import { indexCell, indexLabel, MAX_INDEX } from './label/indexCode';
-import { buildScene, type TrimmedStreet } from './scene/build';
+import { buildScene, type PlacedPoi, type TrimmedStreet } from './scene/build';
+import type { Scene } from './scene/types';
 import { classify } from './style/classify';
 import type { StyleSpec } from './style/types';
 import { buildTestSheets } from './testsheets';
@@ -69,6 +79,15 @@ export interface MapResult {
   /** Coded roads whose braille label didn't fit (collision / off-page / over the
    *  63-index limit). */
   labelsDropped: number;
+  /** Code per named station POI shown on the map (same code scheme as the street
+   *  labels — 3-letter acronym or single-character index); empty for styles that
+   *  carry no stations or for `labelStyle: 'none'`. */
+  stations: LegendEntry[];
+  /** Station POI badges actually placed on the map (over-index-limit stations
+   *  still get a bare-marker badge, so they count as placed). */
+  stationsPlaced: number;
+  /** Stations whose badge didn't fit on the page. */
+  stationsDropped: number;
   /** Streets dropped by edge-snippet trimming (empty when the option is off). */
   trimmed: TrimmedStreet[];
 }
@@ -116,6 +135,7 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   const res = await fetchOverpass(bbox, params.style.sourceKeys, {
     endpoint: params.overpassEndpoint,
     signal: params.signal,
+    nodeKeys: params.style.nodeKeys,
   });
 
   const features = normalize(res);
@@ -127,7 +147,7 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   // map clips to the area below it.
   const printable = printableRect(dim, margins);
   const clip: RectMm = { ...printable, minY: printable.minY + FURNITURE_BAND_MM };
-  const { scene, trimmed, drawnLines } = buildScene(classified, projector, clip, {
+  const { scene, trimmed, drawnLines, pois } = buildScene(classified, projector, clip, {
     simplifyToleranceMm: params.simplifyToleranceMm,
     trimEdgeSnippets: params.trimEdgeSnippets,
     collapseDualCarriageways: params.collapseDualCarriageways ?? params.style.collapseDualCarriageways ?? true,
@@ -177,6 +197,15 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
   }
   // 'none': no legend, no labels.
 
+  // Train-station POIs: one double-border badge per station, drawn on top so it
+  // marks the spot through the road/rail beneath. The braille inside follows the
+  // street-label style — a 3-cell acronym, a single index cell (its own sequence,
+  // distinct from the roads'), or a bare marker for 'none'. Badges are placed
+  // last so they sit above every line and label.
+  // The drawn rail centerlines (non-labelable lines) — stations anchor onto these.
+  const railLines = drawnLines.filter((l) => l.labelable === false).map((l) => l.points);
+  const { stations, placed: stationsPlaced, dropped: stationsDropped } = placeStations(pois, clip, labelStyle, scene, railLines);
+
   const pdf = await renderPdf(scene);
   return {
     pdf,
@@ -187,8 +216,68 @@ export async function generateMap(params: MapParams): Promise<MapResult> {
     legend,
     labelsPlaced,
     labelsDropped,
+    stations,
+    stationsPlaced,
+    stationsDropped,
     trimmed,
   };
+}
+
+/**
+ * Build and composite the train-station badges. The braille content tracks the
+ * map's label style; the on-screen key (`stations`) maps each badge code to its
+ * station name, so the reader can decode the emboss. Pushes the badge primitives
+ * onto `scene` and returns the placement tally.
+ */
+function placeStations(
+  pois: PlacedPoi[],
+  clip: RectMm,
+  labelStyle: LabelStyle,
+  scene: Scene,
+  railLines: PointMm[][],
+): { stations: LegendEntry[]; placed: number; dropped: number } {
+  // 'none' means no labels anywhere — stations included — so the map stays
+  // undisturbed (no badge boxes knocked into it).
+  if (pois.length === 0 || labelStyle === 'none') return { stations: [], placed: 0, dropped: 0 };
+
+  // Fold each cluster / duplicate of a station into one badge, anchored onto the
+  // rail line it serves (and snapped on when it sits just off it).
+  const stationsPois = mergePois(pois, { lines: railLines });
+  const named = stationsPois.filter((p) => p.name).map((p) => p.name as string);
+  const codeByName = new Map<string, string>();
+  const cellByName = new Map<string, BrailleCell[]>();
+  const stations: LegendEntry[] = [];
+
+  if (labelStyle === 'acronym') {
+    // 3-letter codes, uncontracted (a code reads against the legend, not as a word).
+    for (const e of buildLegend(named)) {
+      stations.push(e);
+      codeByName.set(e.name, e.code);
+      cellByName.set(e.name, basicTranslator.translate(e.code.toLowerCase()));
+    }
+  } else if (labelStyle === 'index') {
+    // One index cell per station, in its own a–z… sequence. Past the 63-cell
+    // limit a station still gets a bare-marker badge (like 'none'), so its
+    // location is shown even though it has no code — not counted as "dropped".
+    [...new Set(named)].forEach((name, i) => {
+      if (i >= MAX_INDEX) return;
+      stations.push({ code: indexLabel(i), name });
+      codeByName.set(name, indexLabel(i));
+      cellByName.set(name, [indexCell(i)]);
+    });
+  }
+  // A named station carries its code; an unnamed one still gets a bare-marker
+  // badge so its location shows (in 'none' mode we returned above, drawing none).
+
+  const inputs: PoiInput[] = stationsPois.map((p) => ({
+    name: p.name,
+    point: p.point,
+    code: (p.name && codeByName.get(p.name)) || '',
+    cells: (p.name && cellByName.get(p.name)) || [],
+  }));
+  const { badges, dropped } = placePoiBadges(inputs, clip);
+  scene.primitives.push(...poiBadgePrimitives(badges));
+  return { stations, placed: badges.length, dropped: dropped.length };
 }
 
 /** Render the full multi-page tactile test-sheet gallery — no network. */

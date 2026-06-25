@@ -46,4 +46,16 @@ describe('roadLengths', () => {
     const classified = [lineFeature(undefined, [[0, 0], [0, 10]]), lineFeature('Far', [[200, 200], [200, 220]])];
     expect(roadLengths(classified, proj, CLIP, SCALE)).toEqual([]);
   });
+
+  it('excludes named non-streets (rail) and point POIs from the road list', () => {
+    const rail: ClassifiedFeature = {
+      feature: { id: 'r', tags: { railway: 'rail', name: 'S-Bahn' }, geometry: { type: 'LineString', coordinates: [{ lng: 0, lat: 0 }, { lng: 0, lat: 50 }] } },
+      rule: { id: 'rail', where: {}, z: 0, symbol: { type: 'line', widthMm: 0.8 }, labelable: false },
+    };
+    const station: ClassifiedFeature = {
+      feature: { id: 's', tags: { railway: 'station', name: 'Hbf' }, geometry: { type: 'Point', coordinates: { lng: 10, lat: 10 } } },
+      rule: { id: 'stations', where: {}, z: 0, symbol: { type: 'poi' } },
+    };
+    expect(roadLengths([rail, station, lineFeature('Main', [[0, 0], [0, 10]])], proj, CLIP, SCALE)).toEqual([{ name: 'Main', lengthM: 10 }]);
+  });
 });

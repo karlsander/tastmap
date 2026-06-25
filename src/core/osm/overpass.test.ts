@@ -12,4 +12,14 @@ describe('buildQuery', () => {
     expect(q).toContain('relation["natural"]["type"="multipolygon"](2,1,4,3);');
     expect(q).toContain('out geom;');
   });
+
+  it('requests nodes for nodeKeys (POIs) on top of the ways/relations', () => {
+    const q = buildQuery(bbox, ['railway'], { nodeKeys: ['railway'] });
+    expect(q).toContain('way["railway"](2,1,4,3);');
+    expect(q).toContain('node["railway"](2,1,4,3);');
+  });
+
+  it('omits node clauses when no nodeKeys are given', () => {
+    expect(buildQuery(bbox, ['highway'])).not.toContain('node[');
+  });
 });

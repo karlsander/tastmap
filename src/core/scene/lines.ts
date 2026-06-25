@@ -132,6 +132,38 @@ export function ladderPath(
   return out;
 }
 
+/** Cross-ties laid along a whole polyline at a constant arc-length spacing, each
+ *  perpendicular to the local travel direction — the tie field of a rail line.
+ *  Spacing runs continuously across vertices (no reset per segment), so bends in
+ *  the track don't bunch or thin the ties. The centre stroke is drawn separately. */
+export function ladderAlongPath(
+  points: PointMm[],
+  opts: { tieLengthMm: number; tieSpacingMm: number; widthMm: number },
+): PathPrimitive[] {
+  const out: PathPrimitive[] = [];
+  if (points.length < 2 || opts.tieSpacingMm <= 0) return out;
+  const half = opts.tieLengthMm / 2;
+  let next = opts.tieSpacingMm / 2; // first tie half a step in
+  let acc = 0; // arc length consumed up to the start of the current segment
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const { ux, uy, len } = unit(a, b);
+    if (len === 0) continue;
+    const nx = -uy;
+    const ny = ux;
+    while (next <= acc + len + 1e-9) {
+      const d = next - acc; // distance along this segment to the tie centre
+      const cx = a.x + ux * d;
+      const cy = a.y + uy * d;
+      out.push(segment({ x: cx + nx * half, y: cy + ny * half }, { x: cx - nx * half, y: cy - ny * half }, opts.widthMm));
+      next += opts.tieSpacingMm;
+    }
+    acc += len;
+  }
+  return out;
+}
+
 /** Stacked wavy lines filling a rectangle — a candidate water-area fill. */
 export function wavyFill(
   rect: RectMm,

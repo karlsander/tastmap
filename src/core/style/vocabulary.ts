@@ -11,7 +11,10 @@ export type LinePattern =
   | { kind: 'solid'; widthMm: number }
   | { kind: 'dashed'; widthMm: number; dashMm: readonly number[] }
   | { kind: 'dotted'; spacingMm: number; radiusMm: number }
-  | { kind: 'double'; widthMm: number; gapMm: number };
+  | { kind: 'double'; widthMm: number; gapMm: number }
+  /** Centre stroke with perpendicular cross-ties at a fixed spacing — the rail /
+   *  tram look (a railway track under the fingertip). */
+  | { kind: 'rail'; widthMm: number; tieLengthMm: number; tieSpacingMm: number; tieWidthMm: number };
 
 export interface TactileLine {
   readonly label: string;
@@ -34,6 +37,9 @@ export const TACTILE_LINES = {
   dotted: { label: 'dotted line', pattern: { kind: 'dotted', spacingMm: 3, radiusMm: 0.6 } },
   /** 3 mm dash / 1.5 mm gap — distinct from both dotted and a solid line. */
   dashed: { label: 'dashed line', pattern: { kind: 'dashed', widthMm: 0.6, dashMm: [3, 1.5] } },
+  /** 0.8 mm centre stroke + 3 mm cross-ties every 3 mm (0.5 mm) — the "rail"
+   *  candidate from test-sheet page 2; reads unmistakably as a railway track. */
+  rail: { label: 'rail line', pattern: { kind: 'rail', widthMm: 0.8, tieLengthMm: 3, tieSpacingMm: 3, tieWidthMm: 0.5 } },
 } as const satisfies Record<string, TactileLine>;
 
 export type TactileLineName = keyof typeof TACTILE_LINES;
