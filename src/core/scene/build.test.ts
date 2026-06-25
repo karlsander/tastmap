@@ -214,6 +214,15 @@ describe('buildScene area shading', () => {
     expect(paths.some((p) => p.stroke?.widthMm === 0.5)).toBe(true); // the outline
   });
 
+  it('drops an area below minAreaM2 by real-world footprint, keeps one above', () => {
+    // proj is 1:1000 with lng/lat used as page mm, so the 40×40 square is 1600 m².
+    const fill = { kind: 'crosshatch' as const, spacingMm: 2, angleDeg: 45, widthMm: 0.4 };
+    const kept = scene({ type: 'area', fill, outlineMm: 0.5, minAreaM2: 1000 }); // 1600 ≥ 1000
+    expect(kept.primitives.length).toBeGreaterThan(0);
+    const dropped = scene({ type: 'area', fill, outlineMm: 0.5, minAreaM2: 10000 }); // 1600 < 10000
+    expect(dropped.primitives.length).toBe(0);
+  });
+
   it('clips the fill to the outer ring minus its holes, and outlines both shores', () => {
     const outer: [number, number][] = [[10, 10], [90, 10], [90, 90], [10, 90], [10, 10]];
     const hole: [number, number][] = [[40, 40], [60, 40], [60, 60], [40, 60], [40, 40]];

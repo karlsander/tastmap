@@ -41,6 +41,10 @@ export interface AreaSymbology {
   /** Outline stroke width (mm) for the polygon boundary; omit for no outline
    *  (e.g. parks read fine from texture alone; water wants a bank line). */
   outlineMm?: number;
+  /** Drop the area when its real-world footprint is below this (square metres,
+   *  scale-independent). Keeps the page free of fountains and ornamental basins;
+   *  the size is the *whole* feature's, not just the on-page part. */
+  minAreaM2?: number;
 }
 
 /** A point feature (a node, or the representative point of an area) drawn as a

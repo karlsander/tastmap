@@ -1,24 +1,36 @@
+import { simplify } from '../geo/simplify';
 import type { PointMm } from '../geo/types';
 
 /**
- * Collapse divided roads ("dual carriageways") to a single centerline.
+ * Collapse divided roads ("dual carriageways") to a single centerline — a
+ * topology/graph approach, so junctions read as *streets crossing*, not lanes.
  *
- * In dense OSM data a divided avenue is mapped as two separate `oneway` ways —
- * one per direction — that share a `name` and run parallel a few metres apart.
- * On a tactile map that reads as two roads. We fix it in two steps:
+ * In dense OSM data a divided avenue is mapped as two `oneway` ways, one per
+ * direction, sharing a `name` and running parallel a few metres apart. Earlier
+ * attempts worked on geometry alone: nudging vertices onto a midline (wobbled),
+ * or rasterising to a medial axis (forked at every junction, because the skeleton
+ * faithfully traces the median opening where the carriageways splay around a
+ * crossing). Both fought the data instead of reading its structure.
  *
- *   1. **Fold**: move every vertex of a candidate way to the midpoint between it
- *      and the nearest parallel segment of another same-named way (its twin
- *      carriageway), when one is within `maxSeparationMm`. Both carriageways
- *      thus land on the median between them. Ways are kept whole — no splitting
- *      — so the line never fragments (and survives the min-length filter).
- *   2. **Dedupe**: the two carriageways now trace the same median line, so drop
- *      a folded way when it is nearly coincident with one already kept.
+ * Here we read the structure:
  *
- * Everything is in page millimetres, so the thresholds are distances *on paper*
- * — scale-independent, and exactly the right semantic (carriageways far apart
- * at a large scale stay separate). Un-paired stretches — undivided sections, or
- * the splayed ends where a median opens up — simply don't fold and pass through.
+ *   1. **Chain** — within each `name`, stitch the carriageway segments (split at
+ *      every cross-street) back into long polylines. A cross-street node is
+ *      degree-2 *within the name subgraph* (only the two carriageway segments
+ *      carry the name), so a chain runs straight through junctions; it stops only
+ *      at the road's own forks (slip roads, median U-turns), which are degree ≠ 2.
+ *   2. **Pair** — match the two chains of a divided road by lateral proximity +
+ *      parallelism over a shared run. Greedy, each chain pairs at most once.
+ *   3. **Midline** — resample one chain by arc length and average each sample with
+ *      the nearest point on its twin. One smooth centerline per street, with no
+ *      per-vertex wobble and — crucially — no fork, since the median opening is
+ *      just a brief widening along a single resampled run, not a topology split.
+ *   4. **Heal** — snap the cross-streets that met a now-removed carriageway onto
+ *      the new midline, so a T-junction or crossing lands *on* the centerline.
+ *
+ * The collapse is strictly **name-scoped**: only same-named carriageways ever
+ * fuse, so two different streets — including the one crossing this road — are
+ * never merged. Everything is page millimetres; thresholds are distances on paper.
  */
 
 export interface Way {
@@ -37,135 +49,226 @@ export interface Way {
 }
 
 export interface CollapseOptions {
-  /** Max on-paper gap to the twin carriageway to treat as one road (mm). */
+  /** Max on-paper gap between twin carriageways to fuse them as one road (mm). */
   maxSeparationMm?: number;
-  /** Min gap to count as a twin — below this it's the way's own continuation. */
+  /** Min gap to count as a twin — below this it's the same line / digitising noise. */
   minSeparationMm?: number;
-  /** Min |cos(angle)| between two segments to count as roughly parallel. */
+  /** Min |cos(angle)| between the two chains to accept them as a parallel pair. */
   minParallelCos?: number;
-  /** A folded way is dropped when this fraction of its vertices lie within
-   *  `coincidentMm` of an already-kept same-named way. */
-  coincidentMm?: number;
-  coverageToDrop?: number;
-  /** Endpoints of same-named survivors within this distance are joined into one
-   *  polyline, so seam pieces aren't lost to the min-length filter (mm). */
-  joinToleranceMm?: number;
+  /** Fraction of the shorter chain that must run alongside its twin to pair them. */
+  minOverlapFrac?: number;
+  /** Arc-length step for resampling the midline (mm). */
+  stepMm?: number;
+  /** Vertices within this distance are treated as the same junction node (mm). */
+  nodeTolMm?: number;
+  /** Chaikin smoothing passes applied to the midline. */
+  smoothPasses?: number;
 }
 
-const DEFAULT_MAX_SEPARATION_MM = 10;
-const DEFAULT_MIN_SEPARATION_MM = 1;
+const DEFAULT_MAX_SEPARATION_MM = 14;
+const DEFAULT_MIN_SEPARATION_MM = 0.5;
 const DEFAULT_MIN_PARALLEL_COS = 0.6;
-const DEFAULT_COINCIDENT_MM = 1.2;
-const DEFAULT_COVERAGE_TO_DROP = 0.7;
-const DEFAULT_JOIN_TOLERANCE_MM = 1.5;
+const DEFAULT_MIN_OVERLAP_FRAC = 0.3;
+const DEFAULT_STEP_MM = 1.5;
+const DEFAULT_NODE_TOL_MM = 0.2;
+const DEFAULT_SMOOTH_PASSES = 1;
 
-interface Seg {
-  featureId: string;
-  a: PointMm;
-  b: PointMm;
-  dir: PointMm; // unit a→b
-}
-
+// — vector helpers (page mm) —
 const sub = (p: PointMm, q: PointMm): PointMm => ({ x: p.x - q.x, y: p.y - q.y });
 const add = (p: PointMm, q: PointMm): PointMm => ({ x: p.x + q.x, y: p.y + q.y });
 const scale = (p: PointMm, s: number): PointMm => ({ x: p.x * s, y: p.y * s });
 const dot = (p: PointMm, q: PointMm): number => p.x * q.x + p.y * q.y;
+const dist = (p: PointMm, q: PointMm): number => Math.hypot(p.x - q.x, p.y - q.y);
 const midpoint = (p: PointMm, q: PointMm): PointMm => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
-const norm = (p: PointMm): number => Math.hypot(p.x, p.y);
+const lerp = (a: PointMm, b: PointMm, t: number): PointMm => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+const unit = (p: PointMm): PointMm => {
+  const n = Math.hypot(p.x, p.y);
+  return n === 0 ? { x: 0, y: 0 } : { x: p.x / n, y: p.y / n };
+};
 
-/** Foot-of-perpendicular parameter `t` and perpendicular distance from `p` to
- *  segment a–b. `t` in [0,1] means the foot lies within the segment. */
-function projectToSegment(p: PointMm, a: PointMm, b: PointMm): { t: number; dist: number } {
-  const ab = sub(b, a);
-  const len2 = dot(ab, ab);
-  if (len2 === 0) return { t: -1, dist: Infinity };
-  const t = dot(sub(p, a), ab) / len2;
-  const foot = add(a, scale(ab, t));
-  return { t, dist: norm(sub(p, foot)) };
+/** Resample a polyline at ~`step` arc-length intervals, keeping both endpoints. */
+function resample(pts: PointMm[], step: number): PointMm[] {
+  if (pts.length <= 1) return [...pts];
+  const out = [pts[0]];
+  let acc = 0;
+  let nextAt = step;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const segLen = dist(a, b);
+    while (segLen > 0 && acc + segLen >= nextAt) {
+      out.push(lerp(a, b, (nextAt - acc) / segLen));
+      nextAt += step;
+    }
+    acc += segLen;
+  }
+  const last = pts[pts.length - 1];
+  if (dist(out[out.length - 1], last) > 1e-9) out.push(last);
+  return out;
 }
 
-/** Foot of the perpendicular from `p` to the infinite line through a–b. */
-function projectToLine(p: PointMm, a: PointMm, b: PointMm): PointMm {
-  const ab = sub(b, a);
-  const len2 = dot(ab, ab);
-  if (len2 === 0) return a;
-  return add(a, scale(ab, dot(sub(p, a), ab) / len2));
+/** Closest point on a polyline to `p`, with the unit direction of that segment. */
+function nearestOnPolyline(p: PointMm, pts: PointMm[]): { q: PointMm; dist: number; dir: PointMm } {
+  let best = { q: pts[0], dist: Infinity, dir: { x: 0, y: 0 } };
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const ab = sub(b, a);
+    const len2 = dot(ab, ab);
+    const t = len2 > 0 ? Math.max(0, Math.min(1, dot(sub(p, a), ab) / len2)) : 0;
+    const q = add(a, scale(ab, t));
+    const d = dist(p, q);
+    if (d < best.dist) best = { q, dist: d, dir: unit(ab) };
+  }
+  return best;
 }
 
-/** Distance from `p` to segment a–b, clamped to the segment ends. */
-function distToSegment(p: PointMm, a: PointMm, b: PointMm): number {
-  const ab = sub(b, a);
-  const len2 = dot(ab, ab);
-  if (len2 === 0) return norm(sub(p, a));
-  const t = Math.max(0, Math.min(1, dot(sub(p, a), ab) / len2));
-  return norm(sub(p, add(a, scale(ab, t))));
+/**
+ * Chaikin corner-cutting: round a polyline's interior corners while pinning the
+ * endpoints, so the residual angular jog where a median briefly opens becomes a
+ * gentle curve. Each pass replaces every edge with points at ¼ and ¾ along it.
+ */
+function chaikin(points: PointMm[], passes: number): PointMm[] {
+  let pts = points;
+  for (let p = 0; p < passes && pts.length >= 3; p++) {
+    const next: PointMm[] = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      next.push(lerp(a, b, 0.25), lerp(a, b, 0.75));
+    }
+    next.push(pts[pts.length - 1]);
+    pts = next;
+  }
+  return pts;
 }
 
-/** Join same-named survivors that meet end-to-end into continuous polylines, so
- *  no seam piece is later dropped by the min-length filter. Endpoints within
- *  `tol` are treated as the same node. */
-function joinByProximity(ways: Way[], tol: number): Way[] {
-  if (ways.length <= 1) return ways;
+interface Chain {
+  points: PointMm[];
+  widthMm: number;
+  dashMm?: number[];
+  minLengthMm?: number;
+  labelable?: boolean;
+}
+
+/**
+ * Stitch a name group's carriageway segments into maximal chains. Two segments
+ * join at a shared endpoint only where that node is degree-2 *within the group*
+ * (exactly those two segments) — so a chain runs through cross-street junctions
+ * but stops at the road's own forks, keeping each carriageway a separate chain.
+ */
+function buildChains(ways: Way[], tol: number): Chain[] {
   const key = (p: PointMm): string => `${Math.round(p.x / tol)},${Math.round(p.y / tol)}`;
-  const used = new Array(ways.length).fill(false);
-
-  // endpoint key → ways that start/end there
-  const index = new Map<string, { idx: number; atStart: boolean }[]>();
-  const addEnd = (k: string, idx: number, atStart: boolean): void => {
+  const index = new Map<string, { wi: number; atStart: boolean }[]>();
+  const addEnd = (k: string, wi: number, atStart: boolean): void => {
     const list = index.get(k);
-    if (list) list.push({ idx, atStart });
-    else index.set(k, [{ idx, atStart }]);
+    if (list) list.push({ wi, atStart });
+    else index.set(k, [{ wi, atStart }]);
   };
   ways.forEach((w, i) => {
     addEnd(key(w.points[0]), i, true);
     addEnd(key(w.points[w.points.length - 1]), i, false);
   });
-  const findUnused = (k: string): { idx: number; atStart: boolean } | null => {
-    for (const e of index.get(k) ?? []) if (!used[e.idx]) return e;
-    return null;
-  };
+  const degree = (k: string): number => index.get(k)?.length ?? 0;
+  const used = new Array(ways.length).fill(false);
+  const nextUnusedAt = (k: string): { wi: number; atStart: boolean } | null =>
+    index.get(k)?.find((e) => !used[e.wi]) ?? null;
 
-  const out: Way[] = [];
+  const chains: Chain[] = [];
   for (let i = 0; i < ways.length; i++) {
     if (used[i]) continue;
     used[i] = true;
     let pts = [...ways[i].points];
+    let widthMm = ways[i].stroke.widthMm;
+    let minLengthMm = ways[i].minLengthMm;
+    const dashMm = ways[i].stroke.dashMm;
+    const labelable = ways[i].labelable;
+    const absorb = (w: Way): void => {
+      widthMm = Math.max(widthMm, w.stroke.widthMm);
+      if (w.minLengthMm != null && (minLengthMm == null || w.minLengthMm < minLengthMm)) minLengthMm = w.minLengthMm;
+    };
+    // Extend forward from the tail, then backward from the head, only through
+    // degree-2 nodes (a clean continuation of this single carriageway).
     for (;;) {
-      const e = findUnused(key(pts[pts.length - 1]));
+      const k = key(pts[pts.length - 1]);
+      if (degree(k) !== 2) break;
+      const e = nextUnusedAt(k);
       if (!e) break;
-      used[e.idx] = true;
-      const wp = ways[e.idx].points;
+      used[e.wi] = true;
+      absorb(ways[e.wi]);
+      const wp = ways[e.wi].points;
       pts.push(...(e.atStart ? wp : [...wp].reverse()).slice(1));
     }
     for (;;) {
-      const e = findUnused(key(pts[0]));
+      const k = key(pts[0]);
+      if (degree(k) !== 2) break;
+      const e = nextUnusedAt(k);
       if (!e) break;
-      used[e.idx] = true;
-      const wp = ways[e.idx].points;
+      used[e.wi] = true;
+      absorb(ways[e.wi]);
+      const wp = ways[e.wi].points;
       pts = [...(e.atStart ? [...wp].reverse() : wp).slice(0, -1), ...pts];
     }
-    out.push({ ...ways[i], points: pts });
+    chains.push({ points: pts, widthMm, dashMm, minLengthMm, labelable });
   }
-  return out;
+  return chains;
 }
 
-/** Local travel direction of a polyline at vertex `i` (unit, forward-biased). */
-function localDir(points: PointMm[], i: number): PointMm | null {
-  const next = i < points.length - 1 ? sub(points[i + 1], points[i]) : sub(points[i], points[i - 1]);
-  const len = norm(next);
-  return len === 0 ? null : scale(next, 1 / len);
+/** Fraction of `a`'s length that runs within [minSep, maxSep] of, and roughly
+ *  parallel to, `b`. Used to decide whether two chains are twin carriageways. */
+function overlapFraction(a: PointMm[], b: PointMm[], step: number, minSep: number, maxSep: number, minCos: number): number {
+  const samples = resample(a, step);
+  if (samples.length < 2) return 0;
+  let near = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const { dist: d, dir: dirB } = nearestOnPolyline(samples[i], b);
+    if (d < minSep || d > maxSep) continue;
+    const prev = samples[Math.max(0, i - 1)];
+    const nextS = samples[Math.min(samples.length - 1, i + 1)];
+    const dirA = unit(sub(nextS, prev));
+    if (Math.abs(dot(dirA, dirB)) >= minCos) near++;
+  }
+  return near / samples.length;
 }
+
+/** Raw (unsmoothed) midline of two carriageways: resample the longer chain and
+ *  pull each sample halfway to the nearest point on its twin (within `maxSep`;
+ *  elsewhere the sample stays put — a brief splay, not a fork). */
+function pairMidline(a: PointMm[], b: PointMm[], o: Required<CollapseOptions>): PointMm[] {
+  const [long, short] = a.length >= b.length ? [a, b] : [b, a];
+  return resample(long, o.stepMm).map((s) => {
+    const { q, dist: d } = nearestOnPolyline(s, short);
+    return d <= o.maxSeparationMm ? midpoint(s, q) : s;
+  });
+}
+
+/** Blend one more carriageway `c` into a midline already averaging `weight`
+ *  carriageways: each point moves a 1/(weight+1) share toward `c`, so a third
+ *  lane recentres the line on the true middle of the bundle instead of a lopsided
+ *  pairwise average. Points with no `c` within `maxSep` stay put. */
+function absorbMidline(mid: PointMm[], c: PointMm[], weight: number, o: Required<CollapseOptions>): PointMm[] {
+  return mid.map((p) => {
+    const { q, dist: d } = nearestOnPolyline(p, c);
+    return d <= o.maxSeparationMm ? lerp(p, q, 1 / (weight + 1)) : p;
+  });
+}
+
+const smallerMinLen = (a?: number, b?: number): number | undefined =>
+  a == null ? b : b == null ? a : Math.min(a, b);
 
 export function collapseDualCarriageways(ways: Way[], opts: CollapseOptions = {}): Way[] {
-  const maxSep = opts.maxSeparationMm ?? DEFAULT_MAX_SEPARATION_MM;
-  const minSep = opts.minSeparationMm ?? DEFAULT_MIN_SEPARATION_MM;
-  const minCos = opts.minParallelCos ?? DEFAULT_MIN_PARALLEL_COS;
-  const coincident = opts.coincidentMm ?? DEFAULT_COINCIDENT_MM;
-  const coverageToDrop = opts.coverageToDrop ?? DEFAULT_COVERAGE_TO_DROP;
-  const joinTol = opts.joinToleranceMm ?? DEFAULT_JOIN_TOLERANCE_MM;
+  const o: Required<CollapseOptions> = {
+    maxSeparationMm: opts.maxSeparationMm ?? DEFAULT_MAX_SEPARATION_MM,
+    minSeparationMm: opts.minSeparationMm ?? DEFAULT_MIN_SEPARATION_MM,
+    minParallelCos: opts.minParallelCos ?? DEFAULT_MIN_PARALLEL_COS,
+    minOverlapFrac: opts.minOverlapFrac ?? DEFAULT_MIN_OVERLAP_FRAC,
+    stepMm: opts.stepMm ?? DEFAULT_STEP_MM,
+    nodeTolMm: opts.nodeTolMm ?? DEFAULT_NODE_TOL_MM,
+    smoothPasses: opts.smoothPasses ?? DEFAULT_SMOOTH_PASSES,
+  };
 
-  // Only named, oneway polylines are candidates; everything else is untouched.
-  const out: Way[] = [];
+  // Split into merge candidates (named one-way polylines) and everything else.
+  const others: Way[] = [];
   const byName = new Map<string, Way[]>();
   for (const w of ways) {
     if (w.oneway && w.name && !w.isPolygon && w.points.length >= 2) {
@@ -173,76 +276,138 @@ export function collapseDualCarriageways(ways: Way[], opts: CollapseOptions = {}
       if (list) list.push(w);
       else byName.set(w.name, [w]);
     } else {
-      out.push(w);
+      others.push(w);
     }
   }
 
-  for (const group of byName.values()) {
-    if (group.length < 2) {
-      out.push(...group);
-      continue;
+  const merged: Way[] = [];
+  // nodeKey of a consumed carriageway vertex → its projection on the new midline,
+  // so cross-streets that met the old carriageway can be healed onto the centerline.
+  const heal = new Map<string, PointMm>();
+  const healKey = (p: PointMm): string => `${Math.round(p.x / o.nodeTolMm)},${Math.round(p.y / o.nodeTolMm)}`;
+
+  for (const [name, group] of byName) {
+    const chains = buildChains(group, o.nodeTolMm);
+    const paired = new Array(chains.length).fill(false);
+
+    // A bundle of carriageways collapsed into one centerline. `members` are the
+    // source chain indices (for healing); `points` is the running raw midline.
+    interface Bundle {
+      points: PointMm[];
+      weight: number;
+      members: number[];
+      widthMm: number;
+      dashMm?: number[];
+      minLengthMm?: number;
+      labelable?: boolean;
+    }
+    const bundles: Bundle[] = [];
+
+    // 1. Seed bundles from the best two-chain pairs (greedy, each chain once).
+    const candidates: { i: number; j: number; score: number }[] = [];
+    for (let i = 0; i < chains.length; i++) {
+      for (let j = i + 1; j < chains.length; j++) {
+        const fAB = overlapFraction(chains[i].points, chains[j].points, o.stepMm, o.minSeparationMm, o.maxSeparationMm, o.minParallelCos);
+        const fBA = overlapFraction(chains[j].points, chains[i].points, o.stepMm, o.minSeparationMm, o.maxSeparationMm, o.minParallelCos);
+        const score = Math.max(fAB, fBA);
+        if (score >= o.minOverlapFrac) candidates.push({ i, j, score });
+      }
+    }
+    candidates.sort((p, q) => q.score - p.score);
+    for (const { i, j } of candidates) {
+      if (paired[i] || paired[j]) continue;
+      paired[i] = true;
+      paired[j] = true;
+      const a = chains[i];
+      const b = chains[j];
+      bundles.push({
+        points: pairMidline(a.points, b.points, o),
+        weight: 2,
+        members: [i, j],
+        widthMm: Math.max(a.widthMm, b.widthMm),
+        dashMm: a.dashMm,
+        minLengthMm: smallerMinLen(a.minLengthMm, b.minLengthMm),
+        labelable: a.labelable,
+      });
     }
 
-    // 1. Chain the raw ways into whole carriageway lines first — consecutive
-    //    ways share exact junction nodes, so this is reliable and gives the fold
-    //    long, continuous input (no fragmentation, no min-length losses later).
-    const chains = joinByProximity(group, joinTol);
-    if (chains.length < 2) {
-      out.push(...chains); // only one carriageway present → nothing to merge
-      continue;
-    }
-
-    // Segments of every chain, so each chain can find its twin on another chain.
-    const segs: Seg[] = [];
-    for (const c of chains) {
-      for (let i = 0; i < c.points.length - 1; i++) {
-        const d = sub(c.points[i + 1], c.points[i]);
-        const len = norm(d);
-        if (len === 0) continue;
-        segs.push({ featureId: c.featureId, a: c.points[i], b: c.points[i + 1], dir: scale(d, 1 / len) });
+    // 2. Absorb leftover chains (3rd, 4th… carriageways of a wide road, ramps at
+    //    an interchange) into whichever bundle they run alongside, recentring the
+    //    midline each time. Loop until a pass absorbs nothing.
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (let k = 0; k < chains.length; k++) {
+        if (paired[k]) continue;
+        let best = -1;
+        let bestScore = o.minOverlapFrac;
+        for (let g = 0; g < bundles.length; g++) {
+          const f = Math.max(
+            overlapFraction(chains[k].points, bundles[g].points, o.stepMm, o.minSeparationMm, o.maxSeparationMm, o.minParallelCos),
+            overlapFraction(bundles[g].points, chains[k].points, o.stepMm, o.minSeparationMm, o.maxSeparationMm, o.minParallelCos),
+          );
+          if (f >= bestScore) {
+            bestScore = f;
+            best = g;
+          }
+        }
+        if (best < 0) continue;
+        const bnd = bundles[best];
+        bnd.points = absorbMidline(bnd.points, chains[k].points, bnd.weight, o);
+        bnd.weight += 1;
+        bnd.members.push(k);
+        bnd.widthMm = Math.max(bnd.widthMm, chains[k].widthMm);
+        bnd.minLengthMm = smallerMinLen(bnd.minLengthMm, chains[k].minLengthMm);
+        paired[k] = true;
+        changed = true;
       }
     }
 
-    // 2. Fold each chain's vertices onto the median with its nearest twin.
-    const folded: Way[] = chains.map((w) => {
-      const dir0 = w.points.map((_, i) => localDir(w.points, i));
-      const points = w.points.map((v, i) => {
-        const dir = dir0[i];
-        if (!dir) return v;
-        let best: Seg | null = null;
-        let bestDist = Infinity;
-        for (const s of segs) {
-          if (s.featureId === w.featureId) continue; // skip the way's own segments
-          if (Math.abs(dot(dir, s.dir)) < minCos) continue; // not parallel
-          const pr = projectToSegment(v, s.a, s.b);
-          if (pr.t < 0 || pr.t > 1) continue; // no lateral overlap
-          if (pr.dist < minSep || pr.dist > maxSep) continue; // self/continuation, or too far
-          if (pr.dist < bestDist) {
-            bestDist = pr.dist;
-            best = s;
-          }
-        }
-        return best ? midpoint(v, projectToLine(v, best.a, best.b)) : v;
+    // 3. Emit one smoothed centerline per bundle; heal its members onto it.
+    for (const bnd of bundles) {
+      const points = chaikin(simplify(bnd.points, 0.3), o.smoothPasses);
+      for (const m of bnd.members) {
+        for (const v of chains[m].points) heal.set(healKey(v), nearestOnPolyline(v, points).q);
+      }
+      merged.push({
+        featureId: `${name}~carriageway/${merged.length}`,
+        name,
+        oneway: false, // the merged centerline no longer carries a single direction
+        points,
+        isPolygon: false,
+        stroke: { widthMm: bnd.widthMm, dashMm: bnd.dashMm },
+        minLengthMm: bnd.minLengthMm,
+        labelable: bnd.labelable,
       });
-      return { ...w, points };
-    });
-
-    // 3. Drop a folded chain that now retraces one already kept (its twin).
-    const kept: Way[] = [];
-    for (const w of folded) {
-      const covered = w.points.filter((p) =>
-        kept.some((k) => {
-          for (let i = 0; i < k.points.length - 1; i++) {
-            if (distToSegment(p, k.points[i], k.points[i + 1]) <= coincident) return true;
-          }
-          return false;
-        }),
-      ).length;
-      if (kept.length && covered / w.points.length >= coverageToDrop) continue;
-      kept.push(w);
     }
-    out.push(...kept);
+
+    // Unpaired chains (undivided one-ways, lone carriageways) pass through whole.
+    chains.forEach((c, idx) => {
+      if (paired[idx]) return;
+      merged.push({
+        featureId: `${name}~chain/${merged.length}`,
+        name,
+        oneway: false,
+        points: c.points,
+        isPolygon: false,
+        stroke: { widthMm: c.widthMm, dashMm: c.dashMm },
+        minLengthMm: c.minLengthMm,
+        labelable: c.labelable,
+      });
+    });
   }
 
-  return out;
+  // Heal the rest: snap any vertex that sat on a removed carriageway node onto the
+  // midline, then drop consecutive duplicates so a healed cross-street meets the
+  // centerline cleanly instead of stopping a lane-width short of it.
+  const healed = others.map((w) => {
+    if (heal.size === 0) return w;
+    const out: PointMm[] = [];
+    for (const p of w.points) {
+      const snapped = heal.get(healKey(p)) ?? p;
+      if (out.length === 0 || dist(out[out.length - 1], snapped) > 1e-9) out.push(snapped);
+    }
+    return out.length >= 2 || w.isPolygon ? { ...w, points: out } : w;
+  });
+
+  return [...healed, ...merged];
 }

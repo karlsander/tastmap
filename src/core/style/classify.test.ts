@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../osm/normalize';
 import { classify, matches } from './classify';
-import { standard, streetOverview } from './defaultStyle';
+import { standard } from './defaultStyle';
 
 function line(tags: Record<string, string>): Feature {
   return {
@@ -41,38 +41,32 @@ describe('matches', () => {
 
 describe('classify', () => {
   it('assigns the first matching rule and drops unmatched features', () => {
-    const res = classify([line({ highway: 'primary' }), line({ power: 'line' })], streetOverview);
+    const res = classify([line({ highway: 'primary' }), line({ power: 'line' })], standard);
     expect(res).toHaveLength(1);
     expect(res[0].rule.id).toBe('major-roads');
   });
 
   it('returns features in ascending z order', () => {
-    const res = classify([line({ highway: 'footway' }), line({ highway: 'primary' })], streetOverview);
-    expect(res.map((r) => r.rule.id)).toEqual(['paths', 'major-roads']);
+    const res = classify([line({ highway: 'primary' }), line({ railway: 'rail' })], standard);
+    expect(res.map((r) => r.rule.id)).toEqual(['rail', 'major-roads']); // rail z=15 below major-roads z=30
   });
 
   it('drops cycle ways and service lanes (clutter for a blind reader)', () => {
-    const res = classify([line({ highway: 'cycleway' }), line({ highway: 'service' })], streetOverview);
+    const res = classify([line({ highway: 'cycleway' }), line({ highway: 'service' })], standard);
     expect(res).toHaveLength(0);
   });
 
-  it('keeps standalone footpaths but drops sidewalks and crossings', () => {
+  it('drops footpaths, sidewalks and crossings (no footpath rule)', () => {
     const res = classify(
       [
-        line({ highway: 'footway' }), // park path → paths
-        line({ highway: 'path' }), // → paths
-        line({ highway: 'footway', footway: 'sidewalk' }), // dropped
-        line({ highway: 'footway', footway: 'crossing' }), // dropped
+        line({ highway: 'footway' }),
+        line({ highway: 'path' }),
+        line({ highway: 'footway', footway: 'sidewalk' }),
+        line({ highway: 'footway', footway: 'crossing' }),
       ],
-      streetOverview,
+      standard,
     );
-    expect(res.map((r) => r.rule.id)).toEqual(['paths', 'paths']);
-  });
-
-  it('renders footpaths as a thin solid line (no dash)', () => {
-    const [res] = classify([line({ highway: 'path' })], streetOverview);
-    expect(res.rule.symbol).toMatchObject({ type: 'line', widthMm: 0.3 });
-    expect((res.rule.symbol as { dashMm?: number[] }).dashMm).toBeUndefined();
+    expect(res).toHaveLength(0);
   });
 
   it('routes rail to the rail rule and stations to the POI rule (Standard)', () => {
@@ -85,18 +79,18 @@ describe('classify', () => {
     expect(res.find((r) => r.rule.id === 'stations')?.feature.geometry.type).toBe('Point');
   });
 
-  it('keeps train/metro stations but drops tram and bus stations', () => {
+  it('keeps S-Bahn / main-line stations but drops U-Bahn, tram and bus', () => {
     const res = classify(
       [
         node({ railway: 'station', name: 'Hbf' }), // mainline rail (no subtag) → kept
-        node({ railway: 'station', station: 'subway', name: 'U' }), // metro → kept
-        node({ railway: 'station', station: 'light_rail', name: 'S' }), // light rail → kept
+        node({ railway: 'station', station: 'light_rail', name: 'S' }), // S-Bahn → kept
+        node({ railway: 'station', station: 'subway', name: 'U' }), // U-Bahn metro → dropped
         node({ railway: 'station', station: 'tram', name: 'Tram' }), // dropped
         node({ railway: 'halt', station: 'bus', name: 'Bus' }), // dropped
       ],
       standard,
     );
-    expect(res.map((r) => r.feature.tags.name)).toEqual(['Hbf', 'U', 'S']);
+    expect(res.map((r) => r.feature.tags.name)).toEqual(['Hbf', 'S']);
   });
 
   it('drops station-throat and yard track (sidings, crossovers, spurs, industrial)', () => {

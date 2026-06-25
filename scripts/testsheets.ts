@@ -2,7 +2,7 @@
 // (no network) plus a few real-area road maps with distinct street patterns.
 // Run with: npx vite-node scripts/testsheets.ts
 import { writeFileSync } from 'node:fs';
-import { generateMap, renderTestSheets, streetOverview } from '../src/core/index';
+import { generateMap, renderTestSheets, standard } from '../src/core/index';
 
 const OUT_DIR = '/tmp';
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -26,7 +26,7 @@ for (const a of AREAS) {
       scaleDenominator: a.scale,
       paper: 'A4',
       orientation: 'portrait',
-      style: streetOverview,
+      style: standard,
     });
     writeFileSync(`${OUT_DIR}/tastmap-area-${a.name}.pdf`, pdf);
     console.log(`${a.name}: ${featureCount} matched, ${strokeCount} drawn (1:${a.scale})`);

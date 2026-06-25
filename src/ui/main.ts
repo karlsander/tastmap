@@ -5,7 +5,6 @@ import {
   renderTestSheets,
   renderedBBox,
   standard,
-  streetOverview,
   styles,
   type MapParams,
   type Orientation,
@@ -78,7 +77,7 @@ function readParams(): MapParams {
     scaleDenominator: parseInt(scaleInput.value, 10),
     paper: paperSelect.value as PaperSize,
     orientation: orientation(),
-    style: styles[styleSelect.value] ?? streetOverview,
+    style: styles[styleSelect.value] ?? standard,
     labelStyle: labelStyleSelect.value as LabelStyle,
     marginMm: readMargin(),
     title: titleInput.value.trim() || 'Winsviertel',
@@ -88,6 +87,57 @@ function readParams(): MapParams {
 
 function setStatus(message: string): void {
   statusEl.textContent = message;
+}
+
+// --- URL state: every input lives in the query string, so a refresh restores the
+// settings and any configuration can be opened directly by link (no clicking the
+// form). Programmatic value changes (applyUrlState, picker.setCenter) don't fire
+// input/change events, so writing the URL from those listeners can't loop. ---
+const CENTER_PRECISION = 6;
+
+function syncUrlState(): void {
+  const c = picker.getCenter();
+  const p = new URLSearchParams();
+  p.set('lat', c.lat.toFixed(CENTER_PRECISION));
+  p.set('lng', c.lng.toFixed(CENTER_PRECISION));
+  p.set('scale', scaleInput.value);
+  p.set('paper', paperSelect.value);
+  p.set('orient', orientationSelect.value);
+  p.set('margin', marginInput.value);
+  p.set('style', styleSelect.value);
+  p.set('label', labelStyleSelect.value);
+  p.set('trim', trimCheckbox.checked ? '1' : '0');
+  if (titleInput.value.trim()) p.set('title', titleInput.value.trim());
+  if (searchInput.value.trim()) p.set('q', searchInput.value.trim());
+  history.replaceState(null, '', `${location.pathname}?${p.toString()}`);
+}
+
+/** Apply settings from the query string to the form + picker. Returns true when
+ *  the URL carried any config (so the caller can render it straight away). */
+function applyUrlState(): boolean {
+  const p = new URLSearchParams(location.search);
+  if ([...p.keys()].length === 0) return false;
+  const setSelect = (sel: HTMLSelectElement, key: string): void => {
+    const v = p.get(key);
+    if (v != null && [...sel.options].some((o) => o.value === v)) sel.value = v;
+  };
+  const setInput = (inp: HTMLInputElement, key: string): void => {
+    const v = p.get(key);
+    if (v != null) inp.value = v;
+  };
+  setInput(scaleInput, 'scale');
+  setInput(marginInput, 'margin');
+  setInput(titleInput, 'title');
+  setInput(searchInput, 'q');
+  setSelect(paperSelect, 'paper');
+  setSelect(orientationSelect, 'orient');
+  setSelect(styleSelect, 'style');
+  setSelect(labelStyleSelect, 'label');
+  if (p.get('trim') != null) trimCheckbox.checked = p.get('trim') === '1';
+  const lat = parseFloat(p.get('lat') ?? '');
+  const lng = parseFloat(p.get('lng') ?? '');
+  if (Number.isFinite(lat) && Number.isFinite(lng)) picker.setCenter({ lat, lng });
+  return true;
 }
 
 /** Render the combined legend + length list (code — name — length), longest
@@ -140,11 +190,20 @@ function refreshFootprint(): void {
   );
 }
 
-picker.onCenterChange(() => refreshFootprint());
+picker.onCenterChange(() => {
+  refreshFootprint();
+  syncUrlState();
+});
 
 // Any setting that changes coverage → refresh footprint.
 for (const ctl of [scaleInput, marginInput, paperSelect, orientationSelect]) {
   ctl.addEventListener('change', refreshFootprint);
+}
+
+// Persist every input to the URL on change (and live typing).
+for (const ctl of [scaleInput, marginInput, titleInput, searchInput, paperSelect, orientationSelect, styleSelect, labelStyleSelect, trimCheckbox]) {
+  ctl.addEventListener('input', syncUrlState);
+  ctl.addEventListener('change', syncUrlState);
 }
 
 // --- Address search (geocode → recentre) ---
@@ -161,6 +220,7 @@ async function runSearch(): Promise<void> {
     }
     picker.setCenter(result.center);
     refreshFootprint();
+    syncUrlState();
     setStatus(`Location: ${result.displayName}`);
   } catch (err) {
     setStatus('Search error: ' + (err instanceof Error ? err.message : String(err)));
@@ -216,8 +276,7 @@ void import('./liblouis')
     if (t) translator = t;
   });
 
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
+function runGenerate(): void {
   const params = readParams();
   if (!params.scaleDenominator || params.scaleDenominator < 1) {
     setStatus('Please enter a valid scale.');
@@ -244,6 +303,11 @@ form.addEventListener('submit', (e) => {
       `Done — ${strokeCount} strokes (furniture braille: ${braille}). ${labelNote}.${stationNote} ${roads.length} named roads in this section:`,
     );
   });
+}
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  runGenerate();
 });
 
 testSheetsBtn.addEventListener('click', () => {
@@ -254,4 +318,10 @@ testSheetsBtn.addEventListener('click', () => {
   });
 });
 
+// Restore settings from the URL, normalise it (fill in defaults), and — if the
+// link carried a config — render it straight away, so opening a URL reproduces
+// the map without touching the form.
+const openedWithConfig = applyUrlState();
+syncUrlState();
 refreshFootprint();
+if (openedWithConfig) runGenerate();
