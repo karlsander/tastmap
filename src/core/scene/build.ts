@@ -2,11 +2,14 @@ import { clipPolylineToRect } from '../geo/clip';
 import { groundMeters, type Projector } from '../geo/projection';
 import { simplify } from '../geo/simplify';
 import type { PointMm, RectMm } from '../geo/types';
+import type { Geometry } from '../osm/normalize';
 import type { ClassifiedFeature } from '../style/classify';
 import type { AreaSymbology } from '../style/types';
 import type { AreaFill } from '../style/vocabulary';
 import { collapseDualCarriageways, type Way } from './dualCarriageway';
 import { clipTextureToArea } from './fill';
+import { ladderAlongPath } from './lines';
+import { mergeRailCorridors } from './railMerge';
 import { crossHatchFill, dotFill, hatchFill } from './textures';
 import type { PathPrimitive, Primitive, Scene } from './types';
 
@@ -29,6 +32,12 @@ export interface BuildOptions {
   /** Collapse divided roads (two oneway carriageways of the same name running
    *  close and parallel) to a single centerline. See {@link collapseDualCarriageways}. */
   collapseDualCarriageways?: boolean;
+  /** Collapse bundles of parallel railway tracks (a multi-track line, a station
+   *  throat) to one centerline per corridor. Defaults on. See
+   *  {@link mergeRailCorridors}. */
+  mergeRail?: boolean;
+  /** Tracks within this on-paper distance fuse into one rail corridor, mm. */
+  railCorridorMm?: number;
 }
 
 /** OSM `oneway` values that mean the way carries one direction of traffic. */
@@ -49,6 +58,16 @@ export interface TrimmedStreet {
 export interface DrawnLine {
   name?: string;
   points: PointMm[];
+  /** False for named non-streets (rail): an obstacle for label placement, never
+   *  a label target. Undefined/true = an ordinary street the labeller may use. */
+  labelable?: boolean;
+}
+
+/** A point feature (POI) projected onto the page, inside the clip — the anchor a
+ *  POI badge is placed on. Badge content is decided downstream (by label style). */
+export interface PlacedPoi {
+  name?: string;
+  point: PointMm;
 }
 
 export interface BuildResult {
@@ -57,6 +76,8 @@ export interface BuildResult {
   trimmed: TrimmedStreet[];
   /** Every stroked line as drawn, in page mm (for label placement). */
   drawnLines: DrawnLine[];
+  /** POI anchors inside the page (for badge placement), in draw order. */
+  pois: PlacedPoi[];
 }
 
 function pathLengthMm(points: PointMm[]): number {
@@ -72,6 +93,25 @@ function distToBoundary(p: PointMm, r: RectMm): number {
   return Math.min(p.x - r.minX, r.maxX - p.x, p.y - r.minY, r.maxY - p.y);
 }
 
+const pointInRect = (p: PointMm, r: RectMm): boolean =>
+  p.x >= r.minX && p.x <= r.maxX && p.y >= r.minY && p.y <= r.maxY;
+
+/** The single page-mm point that stands for a POI feature: the node itself, or
+ *  the centroid of an area/line tagged as a POI. Null for empty geometry. */
+function representativePoint(geom: Geometry, proj: Projector): PointMm | null {
+  if (geom.type === 'Point') return proj.toPage(geom.coordinates);
+  const coords = geom.coordinates;
+  if (coords.length === 0) return null;
+  let sx = 0;
+  let sy = 0;
+  for (const c of coords) {
+    const p = proj.toPage(c);
+    sx += p.x;
+    sy += p.y;
+  }
+  return { x: sx / coords.length, y: sy / coords.length };
+}
+
 /** Grid key so coincident OSM nodes (shared junctions) hash together. */
 function vertexKey(p: PointMm): string {
   return `${Math.round(p.x / CONNECT_TOL_MM)},${Math.round(p.y / CONNECT_TOL_MM)}`;
@@ -85,6 +125,8 @@ interface LinePart {
   points: PointMm[];
   stroke: { widthMm: number; dashMm?: number[] };
   minLengthMm?: number;
+  ties?: { lengthMm: number; spacingMm: number; widthMm: number };
+  labelable?: boolean;
 }
 
 /** Generate a tactile fill pattern (dots / hatch) over an axis-aligned rect. */
@@ -162,7 +204,9 @@ export function buildScene(
   // merge sees whole carriageways, not page-edge fragments. Area features are
   // shaded here and collected to draw beneath the lines.
   const ways: Way[] = [];
+  const railWays: Way[] = []; // rail tracks, set aside for corridor merging
   const areaPrimitives: Primitive[] = [];
+  const pois: PlacedPoi[] = [];
   for (const { feature, rule } of classified) {
     if (rule.symbol.type === 'area') {
       if (feature.geometry.type === 'Polygon') {
@@ -172,7 +216,16 @@ export function buildScene(
       }
       continue;
     }
-    ways.push({
+    if (rule.symbol.type === 'poi') {
+      // A POI sits at a single point: the node itself, or the centroid of an
+      // area/line tagged as one (a station mapped as a building, say). Keep only
+      // those inside the page — the badge is drawn there downstream.
+      const point = representativePoint(feature.geometry, proj);
+      if (point && pointInRect(point, clip)) pois.push({ name: feature.tags.name, point });
+      continue;
+    }
+    if (feature.geometry.type === 'Point') continue; // a point can't be a traced line
+    const way: Way = {
       featureId: feature.id,
       name: feature.tags.name,
       oneway: isOneway(feature.tags.oneway),
@@ -180,7 +233,36 @@ export function buildScene(
       isPolygon: feature.geometry.type === 'Polygon',
       stroke: { widthMm: rule.symbol.widthMm, dashMm: rule.symbol.dashMm },
       minLengthMm: rule.symbol.minLengthMm,
-    });
+      ties: rule.symbol.ties,
+      labelable: rule.labelable,
+    };
+    // Rail tracks (the ones carrying a tie decoration) are bundled and collapsed
+    // to one centerline per corridor before clipping; everything else passes
+    // straight through.
+    (way.ties ? railWays : ways).push(way);
+  }
+  if (railWays.length) {
+    if (opts.mergeRail === false) {
+      ways.push(...railWays);
+    } else {
+      const proto = railWays[0]; // rail symbology is uniform; reuse it for the centerlines
+      const centerlines = mergeRailCorridors(
+        railWays.map((w) => w.points),
+        { corridorMm: opts.railCorridorMm },
+      );
+      centerlines.forEach((points, i) => {
+        ways.push({
+          featureId: `rail-corridor/${i}`,
+          oneway: false,
+          points,
+          isPolygon: false,
+          stroke: proto.stroke,
+          minLengthMm: proto.minLengthMm,
+          ties: proto.ties,
+          labelable: proto.labelable,
+        });
+      });
+    }
   }
   const merged = opts.collapseDualCarriageways ? collapseDualCarriageways(ways) : ways;
 
@@ -189,7 +271,7 @@ export function buildScene(
   const parts: LinePart[] = [];
   for (const w of merged) {
     for (const part of clipPolylineToRect(w.points, clip, w.isPolygon)) {
-      parts.push({ featureId: w.featureId, name: w.name, points: part, stroke: w.stroke, minLengthMm: w.minLengthMm });
+      parts.push({ featureId: w.featureId, name: w.name, points: part, stroke: w.stroke, minLengthMm: w.minLengthMm, ties: w.ties, labelable: w.labelable });
     }
   }
 
@@ -235,9 +317,15 @@ export function buildScene(
     }
     const path: PathPrimitive = { kind: 'path', points: simplified, closed: false, stroke: part.stroke };
     primitives.push(path);
-    drawnLines.push({ name: part.name, points: simplified });
+    // Rail and friends carry cross-ties over the centre stroke.
+    if (part.ties) {
+      primitives.push(
+        ...ladderAlongPath(simplified, { tieLengthMm: part.ties.lengthMm, tieSpacingMm: part.ties.spacingMm, widthMm: part.ties.widthMm }),
+      );
+    }
+    drawnLines.push({ name: part.name, points: simplified, labelable: part.labelable });
   }
   trimmed.sort((a, b) => b.lengthM - a.lengthM);
   const scene: Scene = { widthMm: proj.page.widthMm, heightMm: proj.page.heightMm, primitives };
-  return { scene, trimmed, drawnLines };
+  return { scene, trimmed, drawnLines, pois };
 }

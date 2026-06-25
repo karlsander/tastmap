@@ -29,6 +29,11 @@ export interface Way {
   isPolygon: boolean;
   stroke: { widthMm: number; dashMm?: number[] };
   minLengthMm?: number;
+  /** Cross-tie decoration (rail lines): drawn over the centre stroke. */
+  ties?: { lengthMm: number; spacingMm: number; widthMm: number };
+  /** False for named non-streets (rail) — they obstruct label placement but are
+   *  never themselves a label target. Undefined/true = an ordinary street. */
+  labelable?: boolean;
 }
 
 export interface CollapseOptions {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../osm/normalize';
 import { classify, matches } from './classify';
-import { streetOverview } from './defaultStyle';
+import { standard, streetOverview } from './defaultStyle';
 
 function line(tags: Record<string, string>): Feature {
   return {
@@ -9,6 +9,10 @@ function line(tags: Record<string, string>): Feature {
     tags,
     geometry: { type: 'LineString', coordinates: [{ lng: 0, lat: 0 }, { lng: 0.01, lat: 0.01 }] },
   };
+}
+
+function node(tags: Record<string, string>): Feature {
+  return { id: 'node/1', tags, geometry: { type: 'Point', coordinates: { lng: 0, lat: 0 } } };
 }
 
 describe('matches', () => {
@@ -69,5 +73,43 @@ describe('classify', () => {
     const [res] = classify([line({ highway: 'path' })], streetOverview);
     expect(res.rule.symbol).toMatchObject({ type: 'line', widthMm: 0.3 });
     expect((res.rule.symbol as { dashMm?: number[] }).dashMm).toBeUndefined();
+  });
+
+  it('routes rail to the rail rule and stations to the POI rule (Standard)', () => {
+    const res = classify(
+      [line({ railway: 'rail' }), node({ railway: 'station', name: 'Hbf' }), line({ railway: 'tram' }), line({ railway: 'subway' })],
+      standard,
+    );
+    // tram (in-street) and subway (underground) match no rule and are dropped.
+    expect(res.map((r) => r.rule.id).sort()).toEqual(['rail', 'stations']);
+    expect(res.find((r) => r.rule.id === 'stations')?.feature.geometry.type).toBe('Point');
+  });
+
+  it('keeps train/metro stations but drops tram and bus stations', () => {
+    const res = classify(
+      [
+        node({ railway: 'station', name: 'Hbf' }), // mainline rail (no subtag) → kept
+        node({ railway: 'station', station: 'subway', name: 'U' }), // metro → kept
+        node({ railway: 'station', station: 'light_rail', name: 'S' }), // light rail → kept
+        node({ railway: 'station', station: 'tram', name: 'Tram' }), // dropped
+        node({ railway: 'halt', station: 'bus', name: 'Bus' }), // dropped
+      ],
+      standard,
+    );
+    expect(res.map((r) => r.feature.tags.name)).toEqual(['Hbf', 'U', 'S']);
+  });
+
+  it('drops station-throat and yard track (sidings, crossovers, spurs, industrial)', () => {
+    const res = classify(
+      [
+        line({ railway: 'rail' }), // running track → kept
+        line({ railway: 'rail', service: 'siding' }), // dropped
+        line({ railway: 'rail', service: 'crossover' }), // dropped
+        line({ railway: 'rail', service: 'yard' }), // dropped
+        line({ railway: 'rail', usage: 'industrial' }), // dropped
+      ],
+      standard,
+    );
+    expect(res.map((r) => r.rule.id)).toEqual(['rail']); // only the running track survives
   });
 });

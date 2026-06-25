@@ -81,6 +81,7 @@ export function collectLabelCandidates(classified: ClassifiedFeature[], proj: Pr
   for (const { feature } of classified) {
     const name = feature.tags.name;
     if (!name) continue;
+    if (feature.geometry.type === 'Point') continue; // points aren't traced for keyed labels
     const projected = feature.geometry.coordinates.map((c) => proj.toPage(c));
     const parts = clipPolylineToRect(projected, clip, feature.geometry.type === 'Polygon');
     for (const part of parts) {

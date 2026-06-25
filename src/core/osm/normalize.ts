@@ -1,11 +1,13 @@
 import type { LngLat } from '../geo/types';
-import type { OverpassRelation, OverpassResponse, OverpassWay } from './overpass';
+import type { OverpassNode, OverpassRelation, OverpassResponse, OverpassWay } from './overpass';
 
 export type Geometry =
   | { type: 'LineString'; coordinates: LngLat[] }
   /** `coordinates` is the outer ring (closed); `holes` are inner rings (islands)
    *  cut out of it — present only for multipolygon relations. */
-  | { type: 'Polygon'; coordinates: LngLat[]; holes?: LngLat[][] };
+  | { type: 'Polygon'; coordinates: LngLat[]; holes?: LngLat[][] }
+  /** A single point — a tagged OSM node (POI such as a station). */
+  | { type: 'Point'; coordinates: LngLat };
 
 export interface Feature {
   id: string;
@@ -22,6 +24,11 @@ function isWay(el: OverpassResponse['elements'][number]): el is OverpassWay {
 
 function isRelation(el: OverpassResponse['elements'][number]): el is OverpassRelation {
   return el.type === 'relation' && Array.isArray((el as OverpassRelation).members);
+}
+
+function isNode(el: OverpassResponse['elements'][number]): el is OverpassNode {
+  const n = el as OverpassNode;
+  return el.type === 'node' && typeof n.lat === 'number' && typeof n.lon === 'number';
 }
 
 function looksLikeArea(tags: Record<string, string>): boolean {
@@ -124,6 +131,15 @@ export function normalize(res: OverpassResponse): Feature[] {
           ? { type: 'Polygon', coordinates }
           : { type: 'LineString', coordinates };
       features.push({ id: `way/${el.id}`, tags, geometry });
+    } else if (isNode(el)) {
+      // Only tagged nodes are meaningful POIs; geometry-only nodes (way vertices
+      // returned incidentally) carry nothing to classify or label.
+      if (!el.tags) continue;
+      features.push({
+        id: `node/${el.id}`,
+        tags: el.tags,
+        geometry: { type: 'Point', coordinates: { lng: el.lon, lat: el.lat } },
+      });
     } else if (isRelation(el)) {
       const tags = el.tags ?? {};
       // Each outer ring becomes its own Polygon feature (sharing the relation's

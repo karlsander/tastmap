@@ -1,0 +1,14 @@
+{
+  // Cloudflare Workers Builds deploy config. Tastmap is a static, fully
+  // client-side SPA (Overpass + OSM tiles are called from the browser), so there
+  // is no server Worker — we just publish the Vite build output as static assets.
+  // `npm run build` writes ./dist; wrangler uploads it. Without this file the
+  // deploy step fails with "Missing entry-point to Worker script or to assets
+  // directory".
+  "name": "jkmap",
+  "compatibility_date": "2026-06-25",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

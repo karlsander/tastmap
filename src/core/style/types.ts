@@ -26,6 +26,9 @@ export interface LineSymbology {
   dashMm?: number[];
   /** Drop features whose on-paper length is below this (tactile minimum). */
   minLengthMm?: number;
+  /** Perpendicular cross-ties laid along the centre stroke (the rail / tram
+   *  look). The centre stroke uses {@link widthMm}; the ties are drawn on top. */
+  ties?: { lengthMm: number; spacingMm: number; widthMm: number };
 }
 
 /** Area fill for a polygon feature (park, water…). Tactile areas need *textures*,
@@ -40,7 +43,15 @@ export interface AreaSymbology {
   outlineMm?: number;
 }
 
-export type Symbology = LineSymbology | AreaSymbology;
+/** A point feature (a node, or the representative point of an area) drawn as a
+ *  POI badge: a labelled marker rather than a traced line or shaded area. The
+ *  badge's braille content is decided by the pipeline (the label style), so the
+ *  symbology only declares that this feature is a POI. */
+export interface PoiSymbology {
+  type: 'poi';
+}
+
+export type Symbology = LineSymbology | AreaSymbology | PoiSymbology;
 
 export interface Rule {
   id: string;
@@ -48,13 +59,24 @@ export interface Rule {
   /** Higher z draws on top. */
   z: number;
   symbol: Symbology;
+  /** Whether this rule's features are nameable "roads" — surfaced in the road
+   *  list and given on-map street labels. Defaults to `true`; set `false` for
+   *  line features that carry a name but must not be labelled as streets (rail
+   *  lines, for instance). */
+  labelable?: boolean;
 }
 
 export interface StyleSpec {
   id: string;
   name: string;
-  /** OSM tag keys this style needs fetched from Overpass. */
+  /** OSM tag keys this style needs fetched from Overpass (ways + multipolygon
+   *  relations). */
   sourceKeys: string[];
+  /** OSM tag keys to additionally fetch as *nodes* (point POIs), e.g. `railway`
+   *  for stations. Kept separate from {@link sourceKeys} so we don't pull the
+   *  flood of untagged-purpose nodes a line key like `highway` would bring;
+   *  fetched broadly by key and narrowed to the wanted values by the rules. */
+  nodeKeys?: string[];
   /** Evaluated in order; the first matching rule wins. */
   rules: Rule[];
   /** Collapse divided roads (two parallel oneway carriageways of the same name)

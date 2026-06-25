@@ -112,6 +112,80 @@ describe('buildScene minLength (connectivity-aware)', () => {
   });
 });
 
+describe('buildScene rail ties', () => {
+  const railRule = {
+    id: 'rail',
+    where: {},
+    z: 0,
+    symbol: { type: 'line' as const, widthMm: 0.8, ties: { lengthMm: 3, spacingMm: 3, widthMm: 0.5 }, minLengthMm: 3 },
+    labelable: false,
+  };
+  const rail = (coords: [number, number][]): ClassifiedFeature => ({
+    feature: { id: 'rail', tags: { railway: 'rail' }, geometry: { type: 'LineString', coordinates: coords.map(([lng, lat]) => ({ lng, lat })) } },
+    rule: railRule,
+  });
+
+  it('draws one centre stroke plus a field of cross-ties', () => {
+    // mergeRail off so the centerline is the raw geometry (exact coords).
+    const ps = buildScene([rail([[10, 50], [90, 50]])], proj, CLIP, { mergeRail: false }).scene.primitives.filter(
+      (p): p is PathPrimitive => p.kind === 'path',
+    );
+    const centre = ps.filter((p) => p.stroke?.widthMm === 0.8);
+    const ties = ps.filter((p) => p.stroke?.widthMm === 0.5);
+    expect(centre).toHaveLength(1); // single traceable centre line
+    expect(centre[0].points).toEqual([{ x: 10, y: 50 }, { x: 90, y: 50 }]);
+    expect(ties.length).toBeGreaterThan(20); // 80 mm @ 3 mm spacing ≈ 27 ties
+    expect(ties.every((t) => t.points.length === 2)).toBe(true);
+  });
+
+  it('surfaces the rail as a non-labelable drawn line (obstacle, never a label target)', () => {
+    const { drawnLines } = buildScene([rail([[10, 50], [90, 50]])], proj, CLIP, { mergeRail: false });
+    expect(drawnLines).toHaveLength(1);
+    expect(drawnLines[0].labelable).toBe(false);
+  });
+
+  it('collapses two parallel tracks into a single rail corridor (centre + ties)', () => {
+    const tracks = [rail([[10, 50], [90, 50]]), rail([[10, 52], [90, 52]])]; // 2 mm apart
+    const { scene, drawnLines } = buildScene(tracks, proj, CLIP, {}); // mergeRail defaults on
+    const centre = scene.primitives.filter((p): p is PathPrimitive => p.kind === 'path' && p.stroke?.widthMm === 0.8);
+    expect(centre).toHaveLength(1); // two tracks → one centerline
+    expect(drawnLines.every((l) => l.labelable === false)).toBe(true);
+    const ys = centre[0].points.map((p) => p.y);
+    expect(Math.min(...ys)).toBeGreaterThan(50); // sits between the two tracks (≈51)
+    expect(Math.max(...ys)).toBeLessThan(52);
+    expect(scene.primitives.some((p) => p.kind === 'path' && p.stroke?.widthMm === 0.5)).toBe(true); // ties drawn
+  });
+});
+
+describe('buildScene POIs', () => {
+  const poi = (id: string, geometry: ClassifiedFeature['feature']['geometry'], name?: string): ClassifiedFeature => ({
+    feature: { id, tags: name ? { railway: 'station', name } : { railway: 'station' }, geometry },
+    rule: { id: 'stations', where: {}, z: 9, symbol: { type: 'poi' } },
+  });
+  const point = (lng: number, lat: number): ClassifiedFeature['feature']['geometry'] => ({ type: 'Point', coordinates: { lng, lat } });
+
+  it('collects an in-page station node as a POI anchor, drawing nothing itself', () => {
+    const res = buildScene([poi('s', point(40, 60), 'Hbf')], proj, CLIP, {});
+    expect(res.pois).toEqual([{ name: 'Hbf', point: { x: 40, y: 60 } }]);
+    expect(res.scene.primitives).toHaveLength(0); // the badge is composited later, by the pipeline
+    expect(res.drawnLines).toHaveLength(0);
+  });
+
+  it('drops a station node off the page', () => {
+    expect(buildScene([poi('s', point(120, 60))], proj, CLIP, {}).pois).toEqual([]);
+  });
+
+  it('uses the centroid of a station mapped as an area', () => {
+    const square: [number, number][] = [[20, 20], [40, 20], [40, 40], [20, 40], [20, 20]];
+    const geom = { type: 'Polygon' as const, coordinates: square.map(([lng, lat]) => ({ lng, lat })) };
+    const { pois } = buildScene([poi('area', geom, 'Yard')], proj, CLIP, {});
+    expect(pois).toHaveLength(1);
+    // Mean of the 5 ring vertices — the closing (20,20) is counted twice: 140/5.
+    expect(pois[0].point.x).toBeCloseTo(28, 6);
+    expect(pois[0].point.y).toBeCloseTo(28, 6);
+  });
+});
+
 describe('buildScene area shading', () => {
   // A 40×40 square well inside the 100×100 page.
   const square: [number, number][] = [[20, 20], [60, 20], [60, 60], [20, 60], [20, 20]];

@@ -30,6 +30,8 @@ export function roadLengths(
   const mmByName = new Map<string, number>();
   for (const { feature, rule } of classified) {
     if (rule.symbol.type !== 'line') continue; // areas (parks, water) aren't roads
+    if (rule.labelable === false) continue; // named non-streets (rail) aren't roads
+    if (feature.geometry.type === 'Point') continue; // points aren't roads
     const name = feature.tags.name;
     if (!name) continue;
     const projected = feature.geometry.coordinates.map((c) => proj.toPage(c));

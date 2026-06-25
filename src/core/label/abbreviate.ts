@@ -108,9 +108,15 @@ function distinctLetters(s: string, skipFirst = false): string[] {
   return primary.length ? primary : pick(false);
 }
 
-/** Split a name into base tokens (folded) and the road-type initial, if any. */
+/** Split a name into base tokens (folded) and the road-type initial, if any.
+ *  Punctuation is dropped first (replaced by a token break), so a parenthesised
+ *  qualifier — common on station names, "Berlin Ostkreuz (Stadtbahn)" — doesn't
+ *  leak a "(" into a code where a letter belongs. */
 function splitSuffix(name: string): { baseTokens: string[]; suffixLetter: string | null } {
-  const tokens = name.split(/[\s-]+/).filter(Boolean);
+  const tokens = name
+    .replace(/[^\p{L}\s-]+/gu, ' ')
+    .split(/[\s-]+/)
+    .filter(Boolean);
   if (tokens.length === 0) return { baseTokens: [], suffixLetter: null };
 
   const last = fold(tokens[tokens.length - 1]);

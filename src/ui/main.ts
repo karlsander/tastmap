@@ -4,6 +4,7 @@ import {
   generateMap,
   renderTestSheets,
   renderedBBox,
+  standard,
   streetOverview,
   styles,
   type MapParams,
@@ -42,6 +43,8 @@ const labelStyleSelect = el<HTMLSelectElement>('label-style');
 const trimCheckbox = el<HTMLInputElement>('trim');
 const statusEl = el<HTMLParagraphElement>('status');
 const roadsEl = el<HTMLUListElement>('roads');
+const stationsEl = el<HTMLUListElement>('stations');
+const stationsHeading = el<HTMLParagraphElement>('stations-heading');
 const trimmedEl = el<HTMLUListElement>('trimmed');
 const trimmedHeading = el<HTMLParagraphElement>('trimmed-heading');
 const downloadEl = el<HTMLAnchorElement>('download');
@@ -56,7 +59,7 @@ for (const spec of Object.values(styles)) {
   opt.textContent = spec.name;
   styleSelect.append(opt);
 }
-styleSelect.value = streetOverview.id;
+styleSelect.value = standard.id;
 
 const picker = createPicker(el('picker'), DEFAULT_CENTER);
 
@@ -98,6 +101,18 @@ function showRoads(roads: RoadLength[], legend: LegendEntry[]): void {
     const li = document.createElement('li');
     li.textContent = `${code ? `${code} — ` : ''}${r.name} — ${Math.round(r.lengthM)} m`;
     roadsEl.append(li);
+  }
+}
+
+/** Render the station key (code — name), longest list first; hides when empty. */
+function showStations(stations: LegendEntry[]): void {
+  stationsHeading.hidden = stations.length === 0;
+  stationsHeading.textContent = `Stations (${stations.length}):`;
+  stationsEl.replaceChildren();
+  for (const s of stations) {
+    const li = document.createElement('li');
+    li.textContent = `${s.code} — ${s.name}`;
+    stationsEl.append(li);
   }
 }
 
@@ -179,6 +194,7 @@ async function withBusy(busyMessage: string, run: () => Promise<void>): Promise<
   const buttons = [generateBtn, testSheetsBtn];
   for (const b of buttons) b.disabled = true;
   showRoads([], []);
+  showStations([]);
   showTrimmed([]);
   setStatus(busyMessage);
   try {
@@ -209,12 +225,11 @@ form.addEventListener('submit', (e) => {
   }
 
   void withBusy('Fetching OpenStreetMap data and rendering…', async () => {
-    const { pdf, strokeCount, roads, labelStyle, legend, labelsPlaced, labelsDropped, trimmed } = await generateMap({
-      ...params,
-      translator,
-    });
+    const { pdf, strokeCount, roads, labelStyle, legend, labelsPlaced, labelsDropped, stations, stationsPlaced, stationsDropped, trimmed } =
+      await generateMap({ ...params, translator });
     showPdf(pdf, 'tastmap.pdf');
     showRoads(roads, legend);
+    showStations(stations);
     showTrimmed(trimmed);
     const braille = translator ? 'liblouis German' : 'placeholder braille';
     const placedNoun = labelStyle === 'index' ? 'index badges' : 'braille codes';
@@ -222,8 +237,11 @@ form.addEventListener('submit', (e) => {
       labelStyle === 'none'
         ? 'No street labels'
         : `${labelsPlaced} ${placedNoun} placed${labelsDropped ? `, ${labelsDropped} didn't fit` : ''}`;
+    const stationNote = stationsPlaced
+      ? ` ${stationsPlaced} station badge${stationsPlaced === 1 ? '' : 's'}${stationsDropped ? `, ${stationsDropped} didn't fit` : ''}.`
+      : '';
     setStatus(
-      `Done — ${strokeCount} strokes (furniture braille: ${braille}). ${labelNote}. ${roads.length} named roads in this section:`,
+      `Done — ${strokeCount} strokes (furniture braille: ${braille}). ${labelNote}.${stationNote} ${roads.length} named roads in this section:`,
     );
   });
 });
