@@ -129,6 +129,21 @@ interface LinePart {
   labelable?: boolean;
 }
 
+/** Real-world footprint (m²) of a projected outer ring, from its on-page area and
+ *  the map scale: 1 mm on paper is `scaleDenominator` mm on the ground, so
+ *  1 mm² on paper is (scaleDenominator/1000)² m². Uses the whole (unclipped) ring,
+ *  so the size test reflects the real feature, not the slice that fell on-page. */
+function groundAreaM2(ring: PointMm[], scaleDenominator: number): number {
+  let cross = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i];
+    const q = ring[(i + 1) % ring.length];
+    cross += p.x * q.y - q.x * p.y;
+  }
+  const mPerMm = scaleDenominator / 1000;
+  return (Math.abs(cross) / 2) * mPerMm * mPerMm;
+}
+
 /** Generate a tactile fill pattern (dots / hatch) over an axis-aligned rect. */
 function fillTexture(fill: AreaFill, rect: RectMm): Primitive[] {
   if (fill.kind === 'dots') return dotFill(rect, { spacingMm: fill.spacingMm, radiusMm: fill.radiusMm });
@@ -211,8 +226,11 @@ export function buildScene(
     if (rule.symbol.type === 'area') {
       if (feature.geometry.type === 'Polygon') {
         const outer = feature.geometry.coordinates.map((c) => proj.toPage(c));
-        const holes = (feature.geometry.holes ?? []).map((h) => h.map((c) => proj.toPage(c)));
-        areaPrimitives.push(...buildArea(outer, holes, rule.symbol, clip));
+        const minA = rule.symbol.minAreaM2;
+        if (minA == null || groundAreaM2(outer, proj.scaleDenominator) >= minA) {
+          const holes = (feature.geometry.holes ?? []).map((h) => h.map((c) => proj.toPage(c)));
+          areaPrimitives.push(...buildArea(outer, holes, rule.symbol, clip));
+        }
       }
       continue;
     }
