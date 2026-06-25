@@ -41,7 +41,7 @@ export { buildTestSheets } from './testsheets';
 export { generateMap, coverageBBox, renderedBBox, renderTestSheets } from './pipeline';
 export type { MapParams, MapResult, CoverageParams, LabelStyle } from './pipeline';
 export type { TrimmedStreet, PlacedPoi } from './scene/build';
-export { styles, streetOverview, standard } from './style/defaultStyle';
+export { styles, standard } from './style/defaultStyle';
 export { TACTILE_LINES, TACTILE_AREAS, MIN_LINE_WIDTH_MM } from './style/vocabulary';
 export type { TactileLine, TactileLineName, LinePattern, TactileArea, TactileAreaName, AreaFill } from './style/vocabulary';
 export type { StyleSpec } from './style/types';

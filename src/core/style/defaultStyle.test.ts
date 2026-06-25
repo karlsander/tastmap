@@ -1,27 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { standard, streetOverview, styles } from './defaultStyle';
+import { standard, styles } from './defaultStyle';
 
 describe('style registry', () => {
-  it('exposes Street overview and Standard, keyed by id', () => {
-    expect(styles[streetOverview.id]).toBe(streetOverview);
+  it('exposes Standard, keyed by id', () => {
     expect(styles[standard.id]).toBe(standard);
-    expect(Object.values(styles).map((s) => s.name)).toEqual(['Standard', 'Street overview']); // Standard leads (the default)
+    expect(Object.values(styles).map((s) => s.name)).toEqual(['Standard']);
   });
 
-  it('Standard keeps carriageways apart; Street overview folds them (default)', () => {
-    // Standard opts out explicitly; Street overview leaves it unset so the
-    // pipeline default (collapse on) applies.
-    expect(standard.collapseDualCarriageways).toBe(false);
-    expect(streetOverview.collapseDualCarriageways).toBeUndefined();
+  it('folds dual carriageways via the pipeline default', () => {
+    // The flag is left unset, so the pipeline default (collapse on) applies.
+    expect(standard.collapseDualCarriageways).toBeUndefined();
   });
 
-  it('shares the road weight bands; Street overview adds footpaths, Standard adds rail + stations', () => {
-    // Both classify the drivable network identically (major/minor) and shade
-    // water the same way; Street overview appends a thin footpath rule, while
-    // Standard adds the rail line and station POIs instead.
-    const ruleIds = (s: typeof standard): string[] => s.rules.map((r) => r.id);
-    expect(ruleIds(standard)).toEqual(['water', 'rail', 'major-roads', 'minor-roads', 'stations']);
-    expect(ruleIds(streetOverview)).toEqual(['water', 'major-roads', 'minor-roads', 'paths']);
+  it('carries water (two passes), the road weight bands, rail and station POIs', () => {
+    const ruleIds = standard.rules.map((r) => r.id);
+    expect(ruleIds).toEqual(['water', 'water-large', 'rail', 'major-roads', 'minor-roads', 'stations']);
   });
 
   it('shades water as a textured area with a bank outline, no solid fill', () => {
@@ -29,11 +22,22 @@ describe('style registry', () => {
     expect(water).toMatchObject({ type: 'area', fill: { kind: 'crosshatch' }, outlineMm: 0.5 });
   });
 
+  it('filters water to real bodies: ornamental subtypes out, plus a size escape hatch', () => {
+    const water = standard.rules.find((r) => r.id === 'water');
+    const large = standard.rules.find((r) => r.id === 'water-large');
+    // First pass: natural=water minus ornamental subtypes, with a small size floor
+    // (the floor is what removes the untyped fountains).
+    expect(water?.where).toMatchObject({ natural: 'water', water: { not: expect.arrayContaining(['fountain', 'lock', 'basin']) } });
+    expect((water?.symbol as { minAreaM2?: number }).minAreaM2).toBe(2500);
+    // Escape hatch: any natural=water, but only when properly large.
+    expect(large?.where).toEqual({ natural: 'water' });
+    expect((large?.symbol as { minAreaM2?: number }).minAreaM2).toBe(10000);
+  });
+
   it('draws rail as a tied centre stroke that is not a labellable street', () => {
     const rail = standard.rules.find((r) => r.id === 'rail');
     expect(rail?.symbol).toMatchObject({ type: 'line', widthMm: 0.8, ties: { lengthMm: 3, spacingMm: 3, widthMm: 0.5 } });
     expect(rail?.labelable).toBe(false); // a railway carries a name but isn't a street
-    expect(streetOverview.rules.some((r) => r.id === 'rail')).toBe(false); // Standard only
   });
 
   it('keeps only running track — drops sidings, yards, crossovers, industrial spurs', () => {
@@ -44,20 +48,17 @@ describe('style registry', () => {
     });
   });
 
-  it('marks train stations as POIs — trains only, no tram/bus (Standard only)', () => {
+  it('marks train stations as POIs — S-Bahn/main-line only, no U-Bahn/tram/bus', () => {
     const station = standard.rules.find((r) => r.id === 'stations');
     expect(station?.symbol).toEqual({ type: 'poi' });
     expect(station?.where).toMatchObject({
       railway: ['station', 'halt'],
-      station: { not: ['tram', 'bus', 'monorail', 'funicular', 'miniature'] },
+      station: { not: ['subway', 'tram', 'bus', 'monorail', 'funicular', 'miniature'] },
     });
-    expect(streetOverview.rules.some((r) => r.id === 'stations')).toBe(false);
   });
 
-  it('fetches railway ways + station nodes only for Standard', () => {
+  it('fetches railway ways + station nodes alongside highways and water', () => {
     expect(standard.sourceKeys).toEqual(['highway', 'natural', 'railway']);
     expect(standard.nodeKeys).toEqual(['railway']);
-    expect(streetOverview.sourceKeys).toEqual(['highway', 'natural']);
-    expect(streetOverview.nodeKeys).toBeUndefined();
   });
 });

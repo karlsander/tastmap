@@ -2,7 +2,7 @@
 // write a PDF. Run with: npx vite-node scripts/smoke.ts
 import { writeFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
-import { generateMap, streetOverview } from '../src/core/index';
+import { generateMap, standard } from '../src/core/index';
 
 const OUT = '/tmp/tastmap-smoke.pdf';
 const PT_PER_MM = 72 / 25.4;
@@ -15,7 +15,7 @@ const { pdf, featureCount, strokeCount } = await generateMap({
   scaleDenominator: 2500,
   paper: 'A4',
   orientation: 'portrait',
-  style: streetOverview,
+  style: standard,
 });
 
 const ms = Math.round(performance.now() - t0);

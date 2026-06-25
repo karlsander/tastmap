@@ -3,10 +3,9 @@ import { TACTILE_AREAS, TACTILE_LINES } from './vocabulary';
 
 const THICK = TACTILE_LINES.thick.pattern.widthMm; // 2.0 — major roads
 const NORMAL = TACTILE_LINES.normal.pattern.widthMm; // 0.8 — minor roads
-const THIN = TACTILE_LINES.thin.pattern.widthMm; // 0.3 — standalone footpaths
 const RAIL = TACTILE_LINES.rail.pattern; // 0.8 centre stroke + cross-ties
 
-/** OSM keys both styles fetch: the road network plus water area features. */
+/** Base OSM keys: the road network plus water area features. */
 const SOURCE_KEYS = ['highway', 'natural'];
 
 /**
@@ -83,80 +82,73 @@ const railRule: Rule = {
 /**
  * Train stations, drawn as POI badges (a bold sharp-cornered box around a braille
  * label — see `core/label/place`). Matches station/halt *nodes* (and any station
- * mapped as a way/area, via its centroid). Trains only — rail, light rail and
- * metro (S-/U-Bahn, regional): the `station=*` denylist drops tram and bus stops
- * (and monorail/funicular/miniature), while mainline rail (no `station` subtag),
- * `subway` and `light_rail` pass. The badge's label content follows the map's
- * label style. Only "Standard" carries stations.
+ * mapped as a way/area, via its centroid). S-Bahn and proper (main-line/regional)
+ * trains only — *not* the U-Bahn metro: the `station=*` denylist drops `subway`
+ * along with tram/bus/monorail/funicular/miniature, so `station=light_rail` (how
+ * Berlin tags the S-Bahn) and bare main-line stations (no `station` subtag, just
+ * `train=yes`) pass. OSM models each mode of a multi-modal stop as its own node,
+ * so dropping the subway node at e.g. Alexanderplatz or Jannowitzbrücke still
+ * leaves the S-Bahn node — the badge stays (POI cluster-merge keeps it to one).
+ * The badge's label content follows the map's label style. Only "Standard"
+ * carries stations.
  */
 const stationRule: Rule = {
   id: 'stations',
   where: {
     railway: ['station', 'halt'],
-    station: { not: ['tram', 'bus', 'monorail', 'funicular', 'miniature'] },
+    station: { not: ['subway', 'tram', 'bus', 'monorail', 'funicular', 'miniature'] },
   },
   z: 40, // POIs sit on top of everything
   symbol: { type: 'poi' },
 };
 
 /**
- * Standalone footpaths, tracks and steps, drawn thin (0.3 mm). Only "Street
- * overview" carries these; "Standard" omits them to keep the page to the
- * drivable network.
+ * Ornamental / infrastructure water subtypes — not a river, lake or sea. Fountains
+ * are usually mapped as bare `natural=water` (no subtype), so they're caught by
+ * the size floor instead; locks and basins do carry a subtype, so we name them.
  */
-const footpathRule: Rule = {
-  id: 'paths',
-  where: {
-    // `cycleway` is intentionally left out — cycle tracks are rarely
-    // relevant to a blind reader and add parallel-line clutter. Revisit if
-    // we add an "understand traffic" style.
-    highway: ['footway', 'path', 'pedestrian', 'steps', 'track', 'bridleway'],
-    // Drop sidewalks and crossings: they only shadow the road they run
-    // beside. Standalone paths (parks etc.) carry no such subtag and survive.
-    footway: { not: ['sidewalk', 'crossing'] },
-  },
-  z: 10,
-  symbol: { type: 'line', widthMm: THIN, minLengthMm: 3 },
-};
+const ORNAMENTAL_WATER = ['fountain', 'reflecting_pool', 'basin', 'tank', 'lock', 'wastewater', 'salt_pool'];
 
 /**
- * Area features, drawn beneath the road network. Water (rivers, lakes, basins)
- * is shaded with a cross-hatch and a bank outline, so the shoreline is traceable
- * and the surface reads as a filled area. Fill comes from the validated tactile
- * vocabulary (see `./vocabulary`). (Park shading was tried and dropped — dotted
- * parks read as noise here.)
+ * Water, drawn beneath the road network with a cross-hatch and a bank outline so
+ * the shoreline is traceable and the surface reads as a filled area. We only want
+ * real bodies — rivers, lakes, the sea — not the fountains, ornamental basins and
+ * canal locks that speckle a city centre, so two passes filter by tag *and* size:
+ *
+ *   - `water`: `natural=water` that isn't an ornamental subtype, above a real-body
+ *     footprint. The size floor is what removes the untyped ornamental water that
+ *     carries no tag to filter on — fountains (Neptunbrunnen ~190 m², Brunnen der
+ *     Völkerfreundschaft ~370 m²) and even a 1.2k m² show cascade — while genuine
+ *     water sits far above it (the Spree's polygons here are 50k–700k m²).
+ *   - `water-large`: the size escape hatch — *any* `natural=water`, as long as it
+ *     is properly large (≥ 1 ha), so a big body tagged unexpectedly (a reservoir,
+ *     a wide lock cut) still shows even though the first pass would skip it.
+ *
+ * (Park shading was tried and dropped — dotted parks read as noise here.)
  */
 const areaRules: Rule[] = [
   {
     id: 'water',
+    where: { natural: 'water', water: { not: ORNAMENTAL_WATER } },
+    z: 4,
+    symbol: { type: 'area', fill: TACTILE_AREAS.crosshatch.fill, outlineMm: 0.5, minAreaM2: 2500 },
+  },
+  {
+    id: 'water-large',
     where: { natural: 'water' },
     z: 4,
-    symbol: { type: 'area', fill: TACTILE_AREAS.crosshatch.fill, outlineMm: 0.5 },
+    symbol: { type: 'area', fill: TACTILE_AREAS.crosshatch.fill, outlineMm: 0.5, minAreaM2: 10000 },
   },
 ];
 
 /**
- * "Street overview" — the first tactile style.
+ * "Standard" — the one tactile style (more will follow).
  *
- * Single-stroke: divided roads fold to one centerline and same-named survivors
- * join end-to-end (`collapseDualCarriageways` defaults on), so every real-world
- * way reads as a single traceable line. Includes thin footpaths.
- */
-export const streetOverview: StyleSpec = {
-  id: 'street-overview',
-  name: 'Street overview',
-  sourceKeys: SOURCE_KEYS,
-  rules: [...areaRules, ...roadRules, footpathRule],
-};
-
-/**
- * "Standard" — the literal counterpart to Street overview.
- *
- * Same weight hierarchy, but no carriageway folding or path joining: a divided
- * big road keeps its two fat lanes, and an ordinary street stays a single simple
- * line. Footpaths are omitted entirely, leaving just the drivable street network.
- * Closer to the raw OSM geometry; busier, but truer to the ground. Adds the rail
- * network and train-station POIs (Street overview keeps to streets + water).
+ * Two road weight bands read as a hierarchy under the fingertip. Divided roads
+ * fold to a single centerline (`collapseDualCarriageways` defaults on) so a dual
+ * carriageway reads as one traceable line. On top of the drivable network it
+ * carries water areas, the rail network and train-station POIs; footpaths are
+ * omitted to keep the page legible.
  */
 export const standard: StyleSpec = {
   id: 'standard',
@@ -164,11 +156,8 @@ export const standard: StyleSpec = {
   sourceKeys: [...SOURCE_KEYS, 'railway'],
   nodeKeys: ['railway'],
   rules: [...areaRules, railRule, ...roadRules, stationRule],
-  collapseDualCarriageways: false,
 };
 
-// Standard first → it's the default and leads the style dropdown.
 export const styles: Record<string, StyleSpec> = {
   [standard.id]: standard,
-  [streetOverview.id]: streetOverview,
 };
